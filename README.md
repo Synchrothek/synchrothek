@@ -59,10 +59,10 @@ Für AMO-Prüfer: Das hochgeladene Paket lässt sich aus dem Quellen-ZIP reprodu
 
 ### Chrome-Extension-ID
 
-Für den Login braucht Chrome eine feste Extension-ID (Redirect-URI `https://<id>.chromiumapp.org/`). Beim Entwickeln sorgt dafür der Schlüssel `key` in `wxt.config.ts` (ID `pnelejomnmfoieiookoajpkedgcobgol`, OAuth-Client `synchrothek-dev`).
+Für den Login braucht Chrome eine feste Extension-ID (Redirect-URI `https://<id>.chromiumapp.org/`). Beim Entwickeln sorgt dafür der Schlüssel `key` in `wxt.config.ts`: der öffentliche Schlüssel der Chrome-Web-Store-Version (ID `ogecioeoilcegakfimcfnlojjnnponmn`), Entwicklungs-Builds haben also dieselbe ID wie die Store-Version.
 
-- `key` steht nur in Entwicklungs- und Testbuilds im Manifest (`npm run dev`, `--mode e2e`) oder wenn `CHROME_KEY_IN_MANIFEST=1` gesetzt ist. Das ZIP für den Chrome Web Store (`npm run zip`) enthält ihn nicht, der Store vergibt beim ersten Upload eine eigene ID.
-- **Nach dem ersten Store-Upload:** Im Developer Dashboard unter *Paket* den öffentlichen Schlüssel ansehen und als `CHROME_KEY` in `wxt.config.ts` eintragen. Dann haben Entwicklungs-Builds dieselbe ID wie die Store-Version.
+- `key` steht nur in Entwicklungs- und Testbuilds im Manifest (`npm run dev`, `--mode e2e`) oder wenn `CHROME_KEY_IN_MANIFEST=1` gesetzt ist. Das ZIP für den Chrome Web Store (`npm run zip`) enthält ihn nicht; dort ist die ID ohnehin festgelegt.
+- Der öffentliche Schlüssel stammt aus dem Developer Dashboard (*Paket* → „Öffentlichen Schlüssel ansehen“) und ist als `CHROME_KEY` in `wxt.config.ts` eingetragen.
 - **Neue Extension-ID eintragen:** in der Plattform (`OAUTH_CHROME_EXTENSION_IDS`, für die Redirect-URI des Clients `synchrothek-chrome`) und beim Vermittler (`EXTENSION_ORIGINS`, CORS für `chrome-extension://<id>`). Ohne diese Einträge schlagen Login und Raum erstellen in der Store-Version fehl.
 - Firefox: Die Redirect-URI hängt von der Add-on-ID `synchrothek@synchrothek.de` ab (`https://04dc844948c3ffb3c2adec34b663d47578d2ac33.extensions.allizom.org/`) und bleibt gleich.
 

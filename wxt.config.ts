@@ -2,17 +2,15 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'wxt';
 import { API_HOST_MATCH, AUTH_HOST_MATCH, MEDIATHEK_MATCHES } from './src/lib/config';
 
-// Öffentlicher Schlüssel für eine feste Chrome-Extension-ID beim Entwickeln (pnelejomnmfoieiookoajpkedgcobgol),
-// deren OAuth-Redirect-URI https://<id>.chromiumapp.org/ auf der Plattform eingetragen ist.
-// Privater Schlüssel: .keys/chrome-extension.pem (nicht im Repo).
+// Öffentlicher Schlüssel der Chrome-Web-Store-Version (Extension-ID ogecioeoilcegakfimcfnlojjnnponmn, aus dem
+// Developer Dashboard: „Paket“ → „Öffentlichen Schlüssel ansehen“). Damit haben Entwicklungs- und Test-Builds
+// dieselbe ID wie die Store-Version; deren OAuth-Redirect-URI https://<id>.chromiumapp.org/ ist auf der Plattform
+// eingetragen. Der private Schlüssel liegt nur beim Chrome Web Store.
 //
 // Nur in Entwicklungs- und Test-Builds (`wxt`, `--mode e2e`) oder mit CHROME_KEY_IN_MANIFEST=1 im Manifest,
-// nie im ZIP für den Chrome Web Store: Der Store vergibt beim ersten Upload eine eigene ID.
-// Nach dem ersten Store-Upload den öffentlichen Schlüssel aus dem Developer Dashboard („Paket“ →
-// „Öffentlichen Schlüssel ansehen“) hier eintragen, damit Entwicklungs-Builds dieselbe ID wie die Store-Version
-// haben (siehe README, Abschnitt „Chrome-Extension-ID“).
+// nicht im ZIP für den Chrome Web Store (dort ist die ID ohnehin festgelegt).
 const CHROME_KEY =
-  'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2nFvUFc0/Q8Z5JWTAtSPfxPknqkXr1cJ4C8mrRKxaiOcPgarFFm0fqPDrPs247IJEWbKCns2hplUL+YCfGM6o+iGSPT0ohUs+jbztRAngxybG+Qcxo3LKvvmuhai+vwRjKJubQMZajHk1cYEiI8YEATHhzAh2at0aSdhsgfJZAOhJdXbsPOZCg1TZXn3ggt6wzVR1CGC9dO//HwXxHe4cqkuEgKrGK1OjTA75lfhqaEnGXGo3IcEgUvTeFMdAOEyT7LdWzhfJ1hRfqpVT1x+rxLEpvOaxSNMEvVbcIzlsVNCb76KCZlRZdqJrLTAX2GV4c0f1XSNPqanFgqWWTZpSwIDAQAB';
+  'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmFhJwkZBSCPibGEeWlZaBKlzurHlxJ/M++KQJpwIhlovJVXtlCH+m4puDsDcBWGA2J9rcUsbk+1AyLH4ON19+O5JJUs2deRDySC1JnM1ozZ3QvPnqBwPjnfzoI9HH/CWHOSA1MuDx+ZijJ4kXi5JgEeLU+R7nogUiSkObFdk+siq6f/dkRnlEJZWd0keBSU89D10pxeeeTlqMZ3nBjnBfCWq3SBpRTzuyMtfzsV9bjjpedrzdIntSi5cg5OERrlBM2px8wvpztxj2hcK/dNJtV8AjgcEH+JYJdcuCOZETOkZlaUA4SCFgYxbeNEVhfQZsncuqPaS0eyCHb3RPqyk8QIDAQAB';
 
 /** `key` (feste Chrome-ID) nur beim Entwickeln, im Testbuild oder ausdrücklich per Umgebungsvariable. */
 function withChromeKey({ mode, command }: { mode: string; command: string }): boolean {
