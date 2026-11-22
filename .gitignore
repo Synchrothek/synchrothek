@@ -1,0 +1,8 @@
+node_modules/
+.output/
+.wxt/
+e2e/video.mp4
+*.zip
+*.xpi
+.DS_Store
+.keys/

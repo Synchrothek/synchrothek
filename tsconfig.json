@@ -1,0 +1,9 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [".wxt/wxt.d.ts", "src", "e2e", "scripts", "test", "wxt.config.ts"]
+}
