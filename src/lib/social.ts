@@ -9,6 +9,7 @@
  * - Automatische Abfragen melden Fehler nicht in der Oberfläche.
  */
 import { ApiError, type Api, type Friend, type RoomInvite } from './api.ts';
+import { t } from './i18n/index.ts';
 import type { SocialStatus } from './messages';
 
 const POLL_MIN_INTERVAL_MS = 30_000;
@@ -62,7 +63,7 @@ export function createSocial(deps: SocialDeps) {
   function handle(err: unknown, report: boolean) {
     if (!(err instanceof ApiError)) {
       console.warn('Synchrothek: API', err);
-      if (report) error = 'Unerwarteter Fehler.';
+      if (report) error = t('error.unexpected');
       return;
     }
     switch (err.code) {

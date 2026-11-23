@@ -8,7 +8,21 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { apiUrl, createApi, ROOM_CODE_PATTERN, type BasePurpose, type DataContext, type Purpose, type RoomInvite } from '../lib/api';
 import { createAuth, AuthError } from '../lib/auth';
 import { createAvatars } from '../lib/avatars';
-import { BROKER_UNREACHABLE_TEXT, BrokerError, createBroker, isOfficialNodeUrl, TICKET_INVALID_TEXT } from '../lib/broker';
+import { BrokerError, createBroker, isOfficialNodeUrl } from '../lib/broker';
+import { syncErrorMsg } from '../lib/i18n/errors';
+import {
+  browserLanguages,
+  getLanguage,
+  LANG_STORAGE_KEY,
+  msg as localized,
+  parseLangSetting,
+  resolveLanguage,
+  setLanguage,
+  t,
+  tr,
+  type LangSetting,
+  type Msg,
+} from '../lib/i18n';
 import { CLIENT_CONFIG_MAX_AGE_MS, fetchClientConfig, needsUpdate, type ClientConfig } from '../lib/client-config';
 import { API_HOST_MATCH, DEFAULT_SERVER_URL, LEGACY_SERVER_URLS, OFFICIAL_SYNC_URL, normalizeServerUrl } from '../lib/config';
 import { sameContent } from '../lib/content-url';
@@ -83,7 +97,8 @@ interface State {
   playback: Playback | null;
   followedUrl: string | null; // Sendung, zu der der Tab bereits geführt wurde (einmal pro Sendung)
   createdWithAccount: boolean; // Raum selbst erstellt, während die Verbindung mit Konto angemeldet war
-  notice: Notice | null;
+  notice: NoticeState | null;
+  langSetting: LangSetting; // Sprache: automatisch (Browser) oder fest gewählt
 }
 
 interface WantCreate {
@@ -100,6 +115,7 @@ interface ConnAuth {
   identified: boolean; // auth (falls möglich) gesendet, create/join dürfen folgen
   account: AccountInfo | null; // vom Server bestätigt
   pending: number; // gesendete auth ohne Antwort
+  sentWhilePending: number; // seit dem ältesten offenen auth gesendete andere Nachrichten
   retried: boolean; // nach auth_failed schon einmal mit erneuertem Token versucht
   renewTimer?: ReturnType<typeof setTimeout>;
   settle?: () => void; // wartet auf die Antwort zu auth (create mit Ticket erst danach)
@@ -122,43 +138,56 @@ const SNAPSHOT_TIMEOUT_MS = 2_000;
 const RECONNECT_LOOKUP_AFTER = 3; // nach so vielen Fehlversuchen beim Vermittler nach dem Knoten des Raums fragen
 const AUTH_MAX_PER_MINUTE = 9; // Server: höchstens 10 auth pro Minute und Verbindung
 
-const PURPOSE_LABELS: Record<BasePurpose, string> = { watch_progress: 'Weiterschauen', markers: 'Marker', statistics: 'Statistik' };
 const INVITE_ALARM = 'room-invites';
 const INVITE_NOTIFICATION_PREFIX = 'invite:';
 
-const CLOSE_TEXTS: Record<CloseReason, string> = {
-  idle: 'Der Raum wurde wegen Inaktivität geschlossen.',
-  duration: 'Der Raum wurde nach Ablauf der maximalen Raumdauer geschlossen.',
-  shutdown: 'Der Raum wurde wegen eines Server-Neustarts geschlossen.',
-  admin: 'Der Raum wurde vom Betreiber beendet.',
+const CLOSE_TEXTS: Record<CloseReason, Msg> = {
+  idle: localized('closed.idle'),
+  duration: localized('closed.duration'),
+  shutdown: localized('closed.shutdown'),
+  admin: localized('closed.admin'),
 };
-const CLOSE_FALLBACK = 'Der Raum wurde geschlossen.'; // unbekannter Grund (neuerer Server)
+const CLOSE_FALLBACK = localized('closed.other'); // unbekannter Grund (neuerer Server)
 
 /** Ankündigung vor dem Schließen, je Grund. */
-function closingText(reason: CloseReason | string, minutes: number): string {
-  const inMinutes = `in ${minutes} ${minutes === 1 ? 'Minute' : 'Minuten'}`;
-  switch (reason) {
-    case 'duration':
-      return `Der Raum schließt ${inMinutes} (maximale Raumdauer).`;
-    case 'idle':
-      return `Der Raum schließt ${inMinutes} wegen Inaktivität.`;
-    case 'shutdown':
-      return `Der Raum schließt ${inMinutes} wegen eines Server-Neustarts.`;
-    case 'admin':
-      return `Der Raum wird ${inMinutes} vom Betreiber beendet.`;
-    default:
-      return `Der Raum schließt ${inMinutes}.`;
-  }
+function closingText(reason: CloseReason | string, minutes: number): Msg {
+  const key =
+    reason === 'duration' || reason === 'idle' || reason === 'shutdown' || reason === 'admin' ? (`closing.${reason}` as const) : 'closing.other';
+  return localized(key, { count: minutes });
 }
-const BANNED_TEXT = 'Dieses Konto ist gesperrt.';
+const BANNED_TEXT = localized('account.banned');
+const KICKED = localized('room.kicked');
+const BANNED_OUT = localized('room.bannedOut');
+const ROOM_NOT_FOUND = (code: string) => localized('room.notFound', { code });
 
 /** „12 Marker“, „3 gespeicherte Stände“, „Alle Statistikdaten“ – für Hinweise nach dem Löschen. */
-function deletedText(purpose: BasePurpose, deleted: number, solo: boolean): string {
-  const alone = solo ? ' (allein)' : '';
-  if (purpose === 'markers') return `${deleted} Marker${alone}`;
-  if (purpose === 'statistics') return solo ? 'Alle Statistikdaten (allein)' : 'Alle Statistikdaten';
-  return `${deleted} ${deleted === 1 ? 'gespeicherter Stand' : 'gespeicherte Stände'}${alone}`;
+function deletedText(purpose: BasePurpose, deleted: number, solo: boolean): Msg {
+  const what =
+    purpose === 'markers'
+      ? localized('deleted.markers', { count: deleted })
+      : purpose === 'statistics'
+        ? localized('deleted.stats')
+        : localized('deleted.progress', { count: deleted });
+  return solo ? localized('deleted.solo', { what }) : what;
 }
+
+/** Hinweis im Popup. Der Text wird erst beim Anzeigen übersetzt, damit er einen Sprachwechsel übersteht. */
+interface NoticeState {
+  kind: Notice['kind'];
+  text: Msg;
+  retry?: NoticeRetry;
+}
+
+/** Automatisch erzeugter Gastname („Gast 1234“ / „Guest 1234“) folgt der Sprache. */
+const GUEST_NAME = /^(?:Gast|Guest) (\d{4})$/;
+
+/**
+ * Antworten des Servers auf `auth` können `rate_limited` sein („zu viele Anmeldeversuche“). Dieselbe
+ * Fehlerart bekommen aber auch Nachrichten, die während einer laufenden Prüfung warten und die
+ * Warteschlange des Servers (32 Nachrichten) sprengen. Solange seit dem ältesten offenen `auth` weniger
+ * Nachrichten gesendet wurden, kann `rate_limited` nur die Antwort auf `auth` sein.
+ */
+const SERVER_MAX_BACKLOG = 32;
 
 export default defineBackground(() => {
   const state: State = {
@@ -182,6 +211,7 @@ export default defineBackground(() => {
     followedUrl: null,
     createdWithAccount: false,
     notice: null,
+    langSetting: 'auto',
   };
 
   let ws: WebSocket | null = null;
@@ -274,7 +304,7 @@ export default defineBackground(() => {
     onSessionLost: (reason) =>
       reason === 'banned'
         ? setNotice('error', BANNED_TEXT)
-        : setNotice('info', 'Du bist nicht mehr angemeldet (abgelaufen oder im Konto abgemeldet). Bitte melde dich erneut an.'),
+        : setNotice('info', localized('account.sessionLost')),
   });
 
   // -------------------------------------------------------------------------
@@ -318,7 +348,7 @@ export default defineBackground(() => {
   function loadClientConfig(): Promise<void> {
     if (clientConfigLoad || Date.now() - clientConfigAt < CLIENT_CONFIG_MAX_AGE_MS) return clientConfigLoad ?? Promise.resolve();
     clientConfigAt = Date.now();
-    clientConfigLoad = fetchClientConfig()
+    clientConfigLoad = fetchClientConfig(undefined, getLanguage())
       .then((config) => {
         if (config) clientConfig = config; // bei Fehlern den letzten bekannten Stand behalten
         pushStatus();
@@ -333,7 +363,9 @@ export default defineBackground(() => {
 
   async function init() {
     try {
-      const local = await browser.storage.local.get(['serverUrl', 'autoFollow', 'name', 'nameChosen', 'installId']);
+      const local = await browser.storage.local.get(['serverUrl', 'autoFollow', 'name', 'nameChosen', 'installId', LANG_STORAGE_KEY]);
+      state.langSetting = parseLangSetting(local[LANG_STORAGE_KEY]);
+      applyLanguage();
       if (typeof local.serverUrl === 'string') {
         const legacy = LEGACY_SERVER_URLS.map(normalizeServerUrl);
         const stored = normalizeServerUrl(local.serverUrl);
@@ -344,7 +376,10 @@ export default defineBackground(() => {
       }
       if (typeof local.autoFollow === 'boolean') state.autoFollow = local.autoFollow;
       state.installId = typeof local.installId === 'string' ? local.installId : crypto.randomUUID();
-      state.name = typeof local.name === 'string' && local.name ? local.name : `Gast ${1000 + Math.floor(Math.random() * 9000)}`;
+      state.name =
+        typeof local.name === 'string' && local.name
+          ? local.name
+          : t('settings.guestName', { number: String(1000 + Math.floor(Math.random() * 9000)) });
       state.nameChosen = local.nameChosen === true;
       await browser.storage.local.set({ installId: state.installId, name: state.name });
 
@@ -387,9 +422,11 @@ export default defineBackground(() => {
     return sanitizeName(account.name) || null;
   }
 
-  /** Selbst gewählter Name, sonst mit Konto dessen Benutzername, sonst der Gastname. */
+  /** Selbst gewählter Name, sonst mit Konto dessen Benutzername, sonst der Gastname (in der aktuellen Sprache). */
   function displayName(): string {
-    return (state.nameChosen ? null : accountName()) ?? state.name;
+    if (state.nameChosen) return state.name;
+    const guest = GUEST_NAME.exec(state.name);
+    return accountName() ?? (guest ? t('settings.guestName', { number: guest[1]! }) : state.name);
   }
 
   let sentName: string | null = null; // zuletzt an den Raum gemeldeter Name
@@ -415,8 +452,33 @@ export default defineBackground(() => {
     return browser.storage.session.set({ session }).catch(() => {});
   }
 
-  function setNotice(kind: Notice['kind'], text: string, { retry }: { retry?: NoticeRetry } = {}) {
+  function setNotice(kind: Notice['kind'], text: Msg, { retry }: { retry?: NoticeRetry } = {}) {
     state.notice = { kind, text, ...(retry && { retry }) };
+  }
+
+  // -------------------------------------------------------------------------
+  // Sprache: Einstellung (storage.local) oder Browser; gilt für Popup, Hinweise und Content-Scripts
+  // -------------------------------------------------------------------------
+
+  /** Sprache aus Einstellung und Browser neu bestimmen und, falls sie sich ändert, überall anwenden. */
+  function applyLanguage() {
+    const lang = resolveLanguage(state.langSetting, browserLanguages(), browser.i18n?.getUILanguage?.());
+    if (!setLanguage(lang)) return;
+    // Plattform: Meldungen und Einwilligungstexte kommen in der Sprache aus Accept-Language
+    features.languageChanged();
+    social.dismissError();
+    clientConfigAt = 0;
+    void loadClientConfig();
+    syncDisplayName(); // „Gast …“ / „Guest …“
+    for (const port of contentPorts.keys()) post(port, { type: 'lang', lang });
+    pushStatus();
+  }
+
+  async function changeLanguage(setting: LangSetting) {
+    state.langSetting = setting;
+    if (setting === 'auto') await browser.storage.local.remove(LANG_STORAGE_KEY);
+    else await browser.storage.local.set({ [LANG_STORAGE_KEY]: setting });
+    applyLanguage();
   }
 
   const RETRY_CREATE: NoticeRetry = { action: 'create' };
@@ -450,7 +512,7 @@ export default defineBackground(() => {
     try {
       socket = new WebSocket(url);
     } catch {
-      setNotice('error', 'Ungültige Server-Adresse');
+      setNotice('error', localized('server.invalidAddress'));
       state.wantCreate = null;
       pushStatus();
       return;
@@ -464,6 +526,7 @@ export default defineBackground(() => {
       identified: false,
       account: null,
       pending: 0,
+      sentWhilePending: 0,
       retried: false,
     };
     state.conn = 'connecting';
@@ -496,7 +559,7 @@ export default defineBackground(() => {
       clearInterval(keepaliveTimer);
       state.conn = 'idle';
       if (state.code) {
-        setNotice('error', 'Verbindung zum Server unterbrochen – neuer Versuch …');
+        setNotice('error', localized('conn.lostRetrying'));
         // Offiziell: Nach mehreren Fehlversuchen beim Vermittler nachfragen, wo der Raum liegt (Knoten
         // gewechselt oder Raum weg). connect() erfragt den Knoten, sobald keiner bekannt ist.
         if (isOfficial() && ++reconnectFailures >= RECONNECT_LOOKUP_AFTER) {
@@ -508,8 +571,8 @@ export default defineBackground(() => {
       } else if (state.wantCreate) {
         state.wantCreate = null;
         state.nodeUrl = null;
-        if (isOfficial()) setNotice('error', BROKER_UNREACHABLE_TEXT, { retry: RETRY_CREATE });
-        else setNotice('error', `Server ${state.serverUrl} nicht erreichbar`);
+        if (isOfficial()) setNotice('error', localized('broker.unreachable'), { retry: RETRY_CREATE });
+        else setNotice('error', localized('server.unreachable', { url: state.serverUrl }));
       }
       pushStatus();
     };
@@ -547,21 +610,21 @@ export default defineBackground(() => {
     } catch (err) {
       if (state.code !== code || !isOfficial()) return;
       state.conn = 'idle';
-      const e = err instanceof BrokerError ? err : new BrokerError('unreachable', BROKER_UNREACHABLE_TEXT);
+      const e = err instanceof BrokerError ? err : new BrokerError('unreachable');
       if (e.code === 'room_not_found') {
         // Beim Beitreten: falscher Code. Beim Wiederverbinden: Raum ist weg (z. B. Knoten neu gestartet).
         const rejoin = state.inRoom;
-        postToTab({ type: 'notice', text: rejoin ? `Der Raum ${code} besteht nicht mehr.` : `Raum ${code} nicht gefunden.` });
+        postToTab({ type: 'notice', text: t(rejoin ? 'room.gone' : 'room.notFound', { code }) });
         resetRoom();
-        setNotice('error', rejoin ? `Der Raum ${code} besteht nicht mehr. Die Verbindung wurde beendet.` : `Raum ${code} nicht gefunden.`);
+        setNotice('error', localized(rejoin ? 'room.goneEnded' : 'room.notFound', { code }));
       } else if (!state.inRoom) {
         // Beitreten, Vermittler gestört: zurück in die Lobby, mit „Erneut versuchen“
         resetRoom();
-        setNotice('error', e.message, { retry: { action: 'join', code } });
+        setNotice('error', e.text(), { retry: { action: 'join', code } });
       } else {
         // Wiederverbinden: später erneut versuchen (mit bekanntem Knoten zuerst wieder direkt)
         relocate = false;
-        setNotice('error', `${e.message} Neuer Versuch …`);
+        setNotice('error', localized('common.retrying', { message: e.text() }));
         reconnectTimer = setTimeout(connect, Math.max(reconnectDelay, e.retryAfterMs ?? 0));
         reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_MS);
       }
@@ -647,6 +710,7 @@ export default defineBackground(() => {
     if (ca.sentAt.length >= AUTH_MAX_PER_MINUTE) return false; // Server würde mit rate_limited antworten
     if (!send({ type: 'auth', token })) return false;
     ca.sentAt.push(now);
+    if (ca.pending === 0) ca.sentWhilePending = 0;
     ca.pending++;
     return true;
   }
@@ -703,9 +767,10 @@ export default defineBackground(() => {
         return true;
       case 'rate_limited':
         // Nur „zu viele Anmeldeversuche“ gehört zu auth. Während eine Anmeldung geprüft wird, kann der
-        // Server auch andere Nachrichten mit rate_limited ablehnen („zu viele Nachrichten“); die zählen
-        // nicht als Antwort, sonst ginge ein create mit Ticket zu früh raus.
-        if (ca.pending === 0 || !/anmeld/i.test(msg.message ?? '')) return false;
+        // Server auch wartende Nachrichten mit rate_limited ablehnen („zu viele Nachrichten“), aber erst,
+        // wenn seine Warteschlange voll ist; die zählen nicht als Antwort, sonst ginge ein create mit
+        // Ticket zu früh raus. Entschieden wird am Zähler, nicht am Text der Meldung (SERVER_MAX_BACKLOG).
+        if (ca.pending === 0 || ca.sentWhilePending >= SERVER_MAX_BACKLOG) return false;
         ca.pending--;
         settleAuth(ca);
         return true;
@@ -714,9 +779,10 @@ export default defineBackground(() => {
     }
   }
 
-  function send(msg: ClientMessage): boolean {
+  function send(message: ClientMessage): boolean {
     if (ws?.readyState !== WebSocket.OPEN) return false;
-    ws.send(JSON.stringify(msg));
+    ws.send(JSON.stringify(message));
+    if (connAuth && connAuth.pending > 0 && message.type !== 'auth') connAuth.sentWhilePending++;
     return true;
   }
 
@@ -793,20 +859,20 @@ export default defineBackground(() => {
       case 'kicked':
         resetRoom();
         disconnect();
-        setNotice('error', msg.banned ? 'Du wurdest aus dem Raum verbannt.' : 'Du wurdest aus dem Raum entfernt.');
+        setNotice('error', msg.banned ? BANNED_OUT : KICKED);
         break;
 
       case 'roomClosing': {
         const minutes = Math.max(1, Math.round((msg.closesAt - Date.now() - state.clockOffset) / 60_000));
         const text = closingText(msg.reason, minutes);
         setNotice('info', text);
-        postToTab({ type: 'notice', text });
+        postToTab({ type: 'notice', text: tr(text) });
         break;
       }
 
       case 'roomClosed': {
         const text = CLOSE_TEXTS[msg.reason] ?? CLOSE_FALLBACK;
-        postToTab({ type: 'notice', text });
+        postToTab({ type: 'notice', text: tr(text) });
         resetRoom();
         disconnect();
         setNotice('info', text);
@@ -814,35 +880,36 @@ export default defineBackground(() => {
       }
 
       case 'error':
+        // Texte zu den Codes kommen aus der Extension (i18n/errors.ts), nicht aus `message` des Servers
         switch (msg.code) {
           case 'room_not_found': {
             const code = state.code;
             resetRoom();
             disconnect();
-            setNotice('error', code ? `Raum ${code} nicht gefunden.` : msg.message);
+            setNotice('error', code ? ROOM_NOT_FOUND(code) : syncErrorMsg(msg.code, msg.message));
             break;
           }
           case 'room_full':
           case 'banned':
             resetRoom();
             disconnect();
-            setNotice('error', msg.code === 'room_full' ? 'Der Raum ist voll.' : msg.message);
+            setNotice('error', syncErrorMsg(msg.code, msg.message));
             break;
           case 'not_allowed':
-            postToTab({ type: 'notice', text: 'In diesem Raum steuert nur der Host.' });
-            setNotice('info', 'In diesem Raum steuert nur der Host.');
+            postToTab({ type: 'notice', text: t('room.hostOnly') });
+            setNotice('info', localized('room.hostOnly'));
             break;
           case 'server_full': // alle Plätze belegt
           case 'maintenance': // Wartung: keine neuen Räume
-            rejectCreate(msg.message);
+            rejectCreate(syncErrorMsg(msg.code, msg.message));
             break;
           case 'ticket_invalid': // Ticket abgelaufen oder schon benutzt: mit neuem Ticket erneut versuchen
-            rejectCreate(TICKET_INVALID_TEXT, { retry: RETRY_CREATE });
+            rejectCreate(syncErrorMsg(msg.code, msg.message), { retry: RETRY_CREATE });
             break;
           default:
-            // Unbekannte Codes (neuerer Server): Meldung des Servers zeigen
-            if (state.wantCreate?.sent) rejectCreate(msg.message);
-            else setNotice('error', msg.message);
+            // Andere und unbekannte Codes (neuerer Server): eigener Text, unbekannt mit gekürzter Meldung als Zusatz
+            if (state.wantCreate?.sent) rejectCreate(syncErrorMsg(msg.code, msg.message));
+            else setNotice('error', syncErrorMsg(msg.code, msg.message));
         }
         break;
 
@@ -951,13 +1018,13 @@ export default defineBackground(() => {
       }
     } catch (err) {
       if (state.wantCreate !== want) return; // abgebrochen oder neuer Versuch
-      const e = err instanceof BrokerError ? err : new BrokerError('unreachable', BROKER_UNREACHABLE_TEXT);
+      const e = err instanceof BrokerError ? err : new BrokerError('unreachable');
       if (!(err instanceof BrokerError)) console.warn('Synchrothek: Vermittler', err);
       if (e.code === 'auth_failed') {
         features.markReauth();
-        rejectCreate(`${e.message} Bitte melde dich erneut an.`);
+        rejectCreate(e.text()); // Text enthält schon „Bitte melde dich erneut an.“
       } else {
-        rejectCreate(e.message, { retry: e.code === 'unreachable' || e.code === 'auth_unavailable' ? RETRY_CREATE : undefined });
+        rejectCreate(e.text(), { retry: e.code === 'unreachable' || e.code === 'auth_unavailable' ? RETRY_CREATE : undefined });
       }
       pushStatus();
       return;
@@ -985,9 +1052,9 @@ export default defineBackground(() => {
   }
 
   /** Server erstellt keinen Raum: Meldung zeigen; ein bestehender Raum bleibt, sonst Verbindung trennen. */
-  function rejectCreate(message: string, { retry }: { retry?: NoticeRetry } = {}) {
+  function rejectCreate(text: Msg, { retry }: { retry?: NoticeRetry } = {}) {
     state.wantCreate = null;
-    setNotice('error', message || 'Der Raum konnte nicht erstellt werden.', { retry });
+    setNotice('error', text, { retry });
     if (!state.inRoom) {
       state.code = null;
       state.nodeUrl = null;
@@ -1053,7 +1120,7 @@ export default defineBackground(() => {
     // Nur Seiten der unterstützten Mediatheken öffnen (https, echte Host-Prüfung). Die Adresse kommt vom
     // Server bzw. von anderen Teilnehmenden und wird sonst nie geöffnet.
     if (!isMediathekUrl(url)) {
-      setNotice('info', 'Der Raum zeigt auf eine Seite außerhalb der unterstützten Mediatheken. Sie wurde nicht geöffnet.');
+      setNotice('info', localized('room.followOutside'));
       pushStatus();
       return;
     }
@@ -1179,6 +1246,7 @@ export default defineBackground(() => {
         snapshotWaits.get(msg.id)?.({ url: msg.url, title: msg.title, position: msg.position, duration: msg.duration });
         return;
       case 'hello': {
+        post(port, { type: 'lang', lang: getLanguage() }); // vor allen Hinweisen im Player
         info.hasVideo = true;
         info.url = isMediathekUrl(msg.url) ? msg.url : null;
         if (bound && state.playback) {
@@ -1209,7 +1277,7 @@ export default defineBackground(() => {
         if (!bound) return;
         // Sendungswechsel nur zu Seiten der unterstützten Mediatheken
         if (msg.url !== undefined && !isMediathekUrl(msg.url)) {
-          setNotice('info', 'Diese Seite gehört zu keiner unterstützten Mediathek und wird nicht mit dem Raum geteilt.');
+          setNotice('info', localized('room.shareOutside'));
           break;
         }
         const previous = state.playback;
@@ -1310,7 +1378,7 @@ export default defineBackground(() => {
   async function addMarker(tabId: number | null, text: string) {
     const snap = await requestSnapshot(tabId);
     if (tabId == null || !snap || !apiUrl(snap.url)) {
-      setNotice('error', 'In diesem Tab läuft keine Sendung, an der sich ein Marker setzen lässt.');
+      setNotice('error', localized('markers.noShow'));
       return;
     }
     await features.addMarker(await withTitle(tabId, snap), text, contextOf(tabId));
@@ -1322,7 +1390,7 @@ export default defineBackground(() => {
     // Im Raum-Tab gilt ein Sprung für alle, also nur mit Steuerrecht
     const roomTab = state.inRoom && tabId === state.tabId && ports.some(([, i]) => isRoomContent(i.url));
     if (roomTab && !canControl()) {
-      setNotice('info', 'In diesem Raum steuert nur der Host.');
+      setNotice('info', localized('room.hostOnly'));
       return;
     }
     for (const [p] of ports) post(p, { type: 'seekTo', position });
@@ -1335,7 +1403,7 @@ export default defineBackground(() => {
       // Läuft schon eine Verbindung, gilt die Anmeldung ab sofort (z. B. für einen später erstellten Raum)
       if (connAuth?.identified && !connAuth.account) void sendAuth(ws);
     }, (err) => {
-      setNotice('error', err instanceof AuthError ? err.message : 'Anmeldung fehlgeschlagen.');
+      setNotice('error', err instanceof AuthError ? err.text : localized('auth.failed'));
       if (!(err instanceof AuthError)) console.warn('Synchrothek: Anmeldung fehlgeschlagen', err);
       pushStatus();
     });
@@ -1412,11 +1480,13 @@ export default defineBackground(() => {
     const options: Browser.notifications.NotificationCreateOptions = {
       type: 'basic',
       iconUrl: browser.runtime.getURL('/notification.png'),
-      title: 'Einladung in einen Raum',
-      message: `${invite.from.username} lädt dich ein${invite.title ? `: ${invite.title}` : ' in einen Raum.'}`,
+      title: t('invites.notificationTitle'),
+      message: invite.title
+        ? t('invites.notificationWithTitle', { name: invite.from.username, title: invite.title })
+        : t('invites.notificationNoTitle', { name: invite.from.username }),
     };
     // Firefox kennt keine Knöpfe in Benachrichtigungen; dort öffnet ein Klick das Popup
-    if (!import.meta.env.FIREFOX) options.buttons = [{ title: 'Beitreten' }, { title: 'Ablehnen' }];
+    if (!import.meta.env.FIREFOX) options.buttons = [{ title: t('lobby.join') }, { title: t('invites.decline') }];
     await browser.notifications.create(INVITE_NOTIFICATION_PREFIX + invite.id, options);
   }
 
@@ -1424,7 +1494,7 @@ export default defineBackground(() => {
   async function acceptInvite(tabId: number | null, id: string, { newTab = false } = {}) {
     const invite = social.take(id);
     if (!invite) {
-      setNotice('error', 'Die Einladung ist abgelaufen oder wurde zurückgezogen.');
+      setNotice('error', localized('invites.expired'));
       return;
     }
     const switched = state.serverUrl !== OFFICIAL_SYNC_URL;
@@ -1432,7 +1502,7 @@ export default defineBackground(() => {
     let target = tabId;
     if (newTab || target == null) target = (await browser.tabs.create({ active: true }).catch(() => null))?.id ?? null;
     joinRoom(target, invite.roomCode);
-    if (switched) setNotice('info', 'Für die Einladung wurde wieder der Standardserver eingestellt.');
+    if (switched) setNotice('info', localized('invites.serverReset'));
     void social.remove(invite.id);
   }
 
@@ -1506,7 +1576,7 @@ export default defineBackground(() => {
       case 'join': {
         const code = msg.code.trim().toUpperCase();
         if (!/^[A-Z0-9]{6}$/.test(code)) {
-          setNotice('error', 'Der Raumcode hat 6 Zeichen.');
+          setNotice('error', localized('lobby.codeLength'));
           break;
         }
         joinRoom(tabId, code);
@@ -1534,7 +1604,7 @@ export default defineBackground(() => {
       case 'setServer': {
         const url = msg.url.trim();
         if (!/^wss?:\/\/\S+$/.test(url)) {
-          setNotice('error', 'Die Server-Adresse muss mit ws:// oder wss:// beginnen.');
+          setNotice('error', localized('server.mustStartWithWs'));
           break;
         }
         // Schreibvarianten des Standards (z. B. mit „/“ am Ende) als Standard behandeln
@@ -1548,7 +1618,7 @@ export default defineBackground(() => {
         // Auch mit Konto änderbar: der Benutzername des Kontos ist nur der Vorschlag
         const name = sanitizeName(msg.name);
         if (!name) {
-          setNotice('error', 'Bitte gib einen Namen ein.');
+          setNotice('error', localized('settings.nameRequired'));
           break;
         }
         state.name = name;
@@ -1557,6 +1627,9 @@ export default defineBackground(() => {
         syncDisplayName();
         break;
       }
+      case 'setLanguage':
+        await changeLanguage(parseLangSetting(msg.value));
+        break;
       case 'useAccountName':
         state.nameChosen = false;
         await browser.storage.local.set({ nameChosen: false });
@@ -1566,7 +1639,7 @@ export default defineBackground(() => {
         if (!state.inRoom || !canControl()) break;
         const port = roomContentPort();
         if (!port) {
-          setNotice('error', 'Die Sendung des Raums ist im Raum-Tab nicht geöffnet.');
+          setNotice('error', localized('room.contentNotOpen'));
           break;
         }
         post(port, msg.action === 'seek' ? { type: 'control', action: 'seek', delta: msg.delta } : { type: 'control', action: 'toggle' });
@@ -1618,8 +1691,8 @@ export default defineBackground(() => {
         if (base === 'statistics') soloStats.clear(); // nichts mehr melden
         const deleted = await features.revoke(msg.purpose);
         if (deleted !== undefined) {
-          const label = solo ? `${PURPOSE_LABELS[base]} beim alleine Schauen` : PURPOSE_LABELS[base];
-          setNotice('info', `Einwilligung für ${label} widerrufen. ${deletedText(base, deleted, solo)} gelöscht.`);
+          const label = solo ? localized('purpose.soloLong', { label: localized(`purpose.${base}`) }) : localized(`purpose.${base}`);
+          setNotice('info', localized('consents.revoked', { label, deleted: deletedText(base, deleted, solo) }));
           if (msg.purpose === 'statistics') await renewSyncAuth(); // Sync-Server zählt nicht weiter
         }
         break;
@@ -1627,7 +1700,7 @@ export default defineBackground(() => {
       case 'deleteSoloData': {
         if (msg.purpose === 'statistics') soloStats.clear();
         const deleted = await features.deleteSoloData(msg.purpose);
-        if (deleted !== undefined) setNotice('info', `${deletedText(msg.purpose, deleted, true)} gelöscht.`);
+        if (deleted !== undefined) setNotice('info', localized('deleted.done', { what: deletedText(msg.purpose, deleted, true) }));
         break;
       }
       case 'peek': {
@@ -1682,7 +1755,7 @@ export default defineBackground(() => {
         // Keine Erneuerung mehr; die Anmeldung der Verbindung läuft beim Server mit dem Token ab
         if (connAuth) clearTimeout(connAuth.renewTimer);
         if (!(await auth.logout())) {
-          setNotice('info', 'Lokal abgemeldet. Die Plattform war nicht erreichbar, die Anmeldung läuft dort spätestens nach 14 Tagen ab.');
+          setNotice('info', localized('account.loggedOutLocally'));
         }
         break;
     }
@@ -1711,7 +1784,10 @@ export default defineBackground(() => {
   function statusFor(tabId: number | null): PopupStatus {
     const ports = videoPortsOf(tabId);
     const info = state.info;
+    const notice = state.notice;
     return {
+      lang: getLanguage(),
+      langSetting: state.langSetting,
       serverUrl: state.serverUrl,
       isDefaultServer: state.serverUrl === DEFAULT_SERVER_URL,
       server: state.server,
@@ -1720,7 +1796,7 @@ export default defineBackground(() => {
       nameSuggestion: accountName(),
       nameChosen: state.nameChosen,
       conn: state.conn,
-      notice: state.notice,
+      notice: notice ? { kind: notice.kind, text: tr(notice.text), ...(notice.retry && { retry: notice.retry }) } : null,
       account: auth.status(),
       platform: {
         notice: clientConfig?.notice ?? null,
@@ -1816,6 +1892,11 @@ export default defineBackground(() => {
     if (index === 0) await acceptInvite(null, inviteId, { newTab: true });
     else declineInvite(inviteId);
     pushStatus();
+  });
+
+  // Bevorzugte Sprache des Browsers geändert: gilt bei „Automatisch“ sofort
+  globalThis.addEventListener?.('languagechange', () => {
+    void ready.then(applyLanguage);
   });
 
   // Titeländerungen (z. B. Navigation in der Mediathek) für die Anzeige im Popup

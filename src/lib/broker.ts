@@ -8,6 +8,8 @@
  * Tokens gehen nur an BROKER_BASE_URL und an Knoten-Adressen, die isOfficialNodeUrl erfüllen.
  * Ohne Abhängigkeit von `browser`, damit sich das Modul unter Node testen lässt.
  */
+import { brokerErrorMsg } from './i18n/errors.ts';
+import type { Msg } from './i18n/index.ts';
 import { TICKET_MAX_LENGTH } from './protocol.ts';
 
 export const BROKER_BASE_URL = 'https://sync.synchrothek.de/v1';
@@ -17,8 +19,6 @@ const ROOM_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
 const REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_RETRY_AFTER_MS = 60_000;
 
-export const BROKER_UNREACHABLE_TEXT = 'Der Sync-Dienst ist gerade nicht erreichbar.';
-export const TICKET_INVALID_TEXT = 'Der Raum konnte nicht erstellt werden. Bitte versuch es noch einmal.';
 
 export type BrokerErrorCode =
   | 'room_not_found'
@@ -30,14 +30,25 @@ export type BrokerErrorCode =
   | 'unreachable' // Netzwerkfehler, Zeitüberschreitung, unerwartete Antwort
   | (string & {}); // andere Codes des Vermittlers: Meldung anzeigen
 
+/**
+ * Fehler des Vermittlers. Angezeigt wird ein eigener Text zum Code (brokerErrorMsg in i18n/errors.ts),
+ * nicht die `message` des Vermittlers; die bleibt nur als Zusatz für unbekannte Codes und für Logs.
+ */
 export class BrokerError extends Error {
   code: BrokerErrorCode;
   retryAfterMs: number | null;
-  constructor(code: BrokerErrorCode, message: string, retryAfterMs: number | null = null) {
-    super(message);
+  serverMessage: string;
+  constructor(code: BrokerErrorCode, serverMessage = '', retryAfterMs: number | null = null) {
+    super(serverMessage ? `${code}: ${serverMessage}` : code);
     this.name = 'BrokerError';
     this.code = code;
+    this.serverMessage = serverMessage;
     this.retryAfterMs = retryAfterMs;
+  }
+
+  /** Text für die Oberfläche (wird beim Anzeigen in der aktuellen Sprache übersetzt). */
+  text(): Msg {
+    return brokerErrorMsg(this.code, this.serverMessage);
   }
 }
 
@@ -96,11 +107,10 @@ export function createBroker(deps: BrokerDeps = {}) {
   const doFetch = deps.fetch ?? globalThis.fetch.bind(globalThis);
   const now = deps.now ?? Date.now;
   let blockedUntil = 0; // 429: bis dahin keine Anfragen
-  let blockedMessage = '';
 
   async function request(method: 'GET' | 'POST', path: string, token: string | null): Promise<{ status: number; data: unknown }> {
     if (now() < blockedUntil) {
-      throw new BrokerError('rate_limited', blockedMessage || 'Zu viele Anfragen. Bitte versuch es gleich noch einmal.', blockedUntil - now());
+      throw new BrokerError('rate_limited', '', blockedUntil - now());
     }
     let res: Response;
     try {
@@ -118,7 +128,7 @@ export function createBroker(deps: BrokerDeps = {}) {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch {
-      throw new BrokerError('unreachable', BROKER_UNREACHABLE_TEXT);
+      throw new BrokerError('unreachable');
     }
     let data: unknown = null;
     if ((res.headers.get('content-type') ?? '').includes('application/json')) {
@@ -135,15 +145,14 @@ export function createBroker(deps: BrokerDeps = {}) {
       const seconds = Number(res.headers.get('retry-after'));
       const wait = Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 3600) * 1000 : DEFAULT_RETRY_AFTER_MS;
       blockedUntil = now() + wait;
-      blockedMessage = message;
-      throw new BrokerError('rate_limited', message || 'Zu viele Anfragen. Bitte versuch es gleich noch einmal.', wait);
+      throw new BrokerError('rate_limited', message, wait);
     }
     if (!code) {
       // Keine Antwort des Vermittlers (z. B. Proxy-Fehlerseite)
-      if (res.status === 404 && path.startsWith('/rooms/')) throw new BrokerError('room_not_found', 'Raum nicht gefunden.');
-      throw new BrokerError('unreachable', BROKER_UNREACHABLE_TEXT);
+      if (res.status === 404 && path.startsWith('/rooms/')) throw new BrokerError('room_not_found');
+      throw new BrokerError('unreachable');
     }
-    throw new BrokerError(code, message || (code === 'room_not_found' ? 'Raum nicht gefunden.' : BROKER_UNREACHABLE_TEXT));
+    throw new BrokerError(code, message);
   }
 
   return {
@@ -156,17 +165,17 @@ export function createBroker(deps: BrokerDeps = {}) {
       const ticket = typeof d.ticket === 'string' ? d.ticket : '';
       if (!node || !ROOM_CODE.test(code) || !ticket || ticket.length > TICKET_MAX_LENGTH) {
         // Unerwartete Antwort oder Knoten außerhalb von *.sync.synchrothek.de: nicht verbinden
-        throw new BrokerError('unreachable', BROKER_UNREACHABLE_TEXT);
+        throw new BrokerError('unreachable');
       }
       return { code, node, ticket };
     },
 
     /** Knoten eines Raums. */
     async lookupRoom(code: string): Promise<PoolNode> {
-      if (!ROOM_CODE.test(code)) throw new BrokerError('room_not_found', 'Raum nicht gefunden.');
+      if (!ROOM_CODE.test(code)) throw new BrokerError('room_not_found');
       const { data } = await request('GET', `/rooms/${code}`, null);
       const node = nodeFrom((data as Record<string, unknown> | null)?.node);
-      if (!node) throw new BrokerError('unreachable', BROKER_UNREACHABLE_TEXT);
+      if (!node) throw new BrokerError('unreachable');
       return node;
     },
   };

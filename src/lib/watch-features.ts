@@ -23,6 +23,7 @@ import {
   type SoloStatsReport,
   type StatsSummary,
 } from './api';
+import { t } from './i18n/index.ts';
 import type { ConsentView, FeaturesStatus, ProgressReason, ShowSnapshot } from './messages';
 import { basePurposeOf, isOutdated, isSoloPurpose, mayRead, mayWrite, soloPurposeOf, worthReading } from './watch-context';
 
@@ -109,7 +110,7 @@ export function createWatchFeatures(deps: WatchFeaturesDeps) {
   function handle(err: unknown, report: boolean) {
     if (!(err instanceof ApiError)) {
       console.warn('Synchrothek: API', err);
-      if (report) error = 'Unerwarteter Fehler.';
+      if (report) error = t('error.unexpected');
       return;
     }
     switch (err.code) {
@@ -124,12 +125,12 @@ export function createWatchFeatures(deps: WatchFeaturesDeps) {
         // Zusatz-Einwilligung ohne Haupteinwilligung (z. B. inzwischen auf der Webseite widerrufen)
         consentAt = 0;
         void loadConsent(0);
-        if (report) error = 'Bitte willige zuerst in die Funktion selbst ein.';
+        if (report) error = t('consent.baseFirst');
         break;
       case 'consent_version_mismatch':
         consentAt = 0;
         void loadConsent(0);
-        if (report) error = 'Der Einwilligungstext wurde inzwischen geändert. Bitte lies die neue Fassung.';
+        if (report) error = t('consent.textChanged');
         break;
       case 'reauth':
         reauth = true;
@@ -296,8 +297,8 @@ export function createWatchFeatures(deps: WatchFeaturesDeps) {
       if (!mayWrite(consent, 'markers', context)) {
         error =
           context === 'solo' && granted('markers')
-            ? 'Du schaust gerade allein. Marker setzen geht dann nur mit „Auch beim alleine Schauen“.'
-            : 'Für Marker fehlt die Einwilligung.';
+            ? t('markers.soloHint')
+            : t('markers.noConsent');
         return;
       }
       const item = await api.addMarker({ ...snap, text }, context);
@@ -363,7 +364,7 @@ export function createWatchFeatures(deps: WatchFeaturesDeps) {
   async function grant(purpose: Purpose, version: string): Promise<boolean> {
     const ok = await action(async () => {
       if (isSoloPurpose(purpose) && !granted(basePurposeOf(purpose))) {
-        error = 'Bitte willige zuerst in die Funktion selbst ein.';
+        error = t('consent.baseFirst');
         return false;
       }
       const gen = generation;
@@ -472,6 +473,15 @@ export function createWatchFeatures(deps: WatchFeaturesDeps) {
     },
     dismissError: () => {
       error = null;
+    },
+    /**
+     * Sprache gewechselt: Einwilligungstexte kommen in der Sprache aus Accept-Language, also neu laden.
+     * Eine alte Fehlermeldung (in der vorigen Sprache) verschwindet.
+     */
+    languageChanged() {
+      error = null;
+      consentAt = 0;
+      if (deps.isSignedIn() && !reauth) void loadConsent(0);
     },
     /** Die API lehnt auch ein frisches Token ab (z. B. aus einem anderen Modul gemeldet). */
     markReauth: () => {

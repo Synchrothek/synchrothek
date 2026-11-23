@@ -1,6 +1,6 @@
 # Synchrothek
 
-> **English summary:** Synchrothek is a browser extension (Manifest V3, Chrome and Firefox) for watching content from the German public broadcasters' media libraries together. Everyone watches in the official player; only play, pause and position are synchronised via a small WebSocket server (self-hostable). An optional Synchrothek account adds resume, markers, statistics and friends – watch history is only stored with explicit consent. Licensed under AGPL-3.0-only. Independent project, not affiliated with ARD or ZDF. Security reports: see [SECURITY.md](SECURITY.md).
+> **English summary:** Synchrothek is a browser extension (Manifest V3, Chrome and Firefox) for watching content from the German public broadcasters' media libraries together. Everyone watches in the official player; only play, pause and position are synchronised via a small WebSocket server (self-hostable). An optional Synchrothek account adds resume, markers, statistics and friends – watch history is only stored with explicit consent. The interface is available in German and English (follows the browser language, can be changed in the popup settings). Licensed under AGPL-3.0-only. Independent project, not affiliated with ARD or ZDF. Security reports: see [SECURITY.md](SECURITY.md).
 
 Browser-Extension (Manifest V3, Chrome & Firefox), mit der mehrere Personen Inhalte aus öffentlich-rechtlichen Mediatheken synchron gemeinsam schauen, ähnlich wie Watch2Gether oder Teleparty.
 
@@ -24,7 +24,7 @@ Der offizielle Dienst besteht aus einem Vermittler (`https://sync.synchrothek.de
 - **Beitreten:** `GET /v1/rooms/<CODE>` nennt den Knoten, danach `join` wie bisher. 404 → „Raum … nicht gefunden.“
 - **Wiederverbinden:** zuerst direkt zum zuletzt benutzten Knoten (in `storage.session`). Nach 3 Fehlversuchen fragt die Extension den Vermittler (`GET /v1/rooms/<CODE>`): Nennt er einen anderen Knoten, verbindet sie sich dorthin; antwortet er mit 404, wird der Raum mit dem Hinweis „Der Raum … besteht nicht mehr.“ beendet; ist er nicht erreichbar, geht es mit dem bekannten Knoten weiter.
 - **Beitreten bei gestörtem Vermittler:** Hinweis mit Knopf „Erneut versuchen“.
-- **Fehler:** Meldung des Vermittlers anzeigen; `ticket_invalid`, `auth_unavailable` und „Der Sync-Dienst ist gerade nicht erreichbar.“ mit Knopf „Erneut versuchen“ (holt ein neues Ticket). `401 auth_failed`: einmal mit erneuertem Token, sonst Hinweis zum neuen Anmelden. Nach `429` wartet die Extension `Retry-After` ab, bevor sie den Vermittler wieder fragt.
+- **Fehler:** eigener Text der Extension zum Code des Vermittlers (siehe *Sprachen*); `ticket_invalid`, `auth_unavailable` und „Der Sync-Dienst ist gerade nicht erreichbar.“ mit Knopf „Erneut versuchen“ (holt ein neues Ticket). `401 auth_failed`: einmal mit erneuertem Token, sonst Hinweis zum neuen Anmelden. Nach `429` wartet die Extension `Retry-After` ab, bevor sie den Vermittler wieder fragt.
 - **Sicherheit:** Tokens gehen nur an `https://sync.synchrothek.de` und an Knoten, deren Adresse genau `wss://<name>.sync.synchrothek.de` ist (ohne Port, Pfad, Zugangsdaten); jede andere Knoten-Adresse vom Vermittler wird abgelehnt, ohne zu verbinden. Der Vermittler wird ohne Host-Berechtigung per CORS angesprochen (Extension-Origins sind dort freigegeben).
 
 ## Entwicklung
@@ -131,11 +131,22 @@ API der offiziellen Plattform, siehe [`docs/offizielle-dienste.md`](docs/offizie
 
 ## Hinweise der Plattform und Kontosperre
 
-- **Client-Konfiguration:** Beim Start und beim Öffnen des Popups (höchstens alle 5 Minuten) fragt die Extension ohne Token `GET /v1/client-config` ab (`docs/api.md` 2a). Ist die eigene Version älter als `minExtensionVersion` (numerisch je Stelle verglichen), zeigt das Popup „Bitte aktualisiere Synchrothek“; ein `notice` erscheint als Hinweisbanner (nur Text). Fehler beim Abruf werden ignoriert.
-- **Raum erstellen abgelehnt:** Meldet der Sync-Server `server_full` oder `maintenance`, zeigt das Popup die Meldung des Servers. Es entsteht kein Raum, und wer schon in einem Raum ist, bleibt darin (die Extension erstellt aus einem Raum heraus über die bestehende Verbindung und verlässt den alten Raum erst, wenn der neue steht). Unbekannte Fehlercodes zeigen ebenfalls die Meldung des Servers.
+- **Client-Konfiguration:** Beim Start und beim Öffnen des Popups (höchstens alle 5 Minuten) fragt die Extension ohne Token `GET /v1/client-config` ab (`docs/api.md` 2a). Ist die eigene Version älter als `minExtensionVersion` (numerisch je Stelle verglichen), zeigt das Popup „Bitte aktualisiere Synchrothek“; ein `notice` erscheint als Hinweisbanner (nur Text, Freitext der Plattform, von der Extension nicht übersetzt). Fehler beim Abruf werden ignoriert.
+- **Raum erstellen abgelehnt:** Meldet der Sync-Server `server_full` oder `maintenance`, zeigt das Popup einen passenden Hinweis. Es entsteht kein Raum, und wer schon in einem Raum ist, bleibt darin (die Extension erstellt aus einem Raum heraus über die bestehende Verbindung und verlässt den alten Raum erst, wenn der neue steht). Unbekannte Fehlercodes zeigen einen allgemeinen Hinweis mit der gekürzten Meldung des Servers als Zusatz.
 - **Raum schließt / beendet:** Ankündigung und Meldung je Grund (`duration`, `idle`, `shutdown`, `admin`), unbekannte Gründe eine allgemeine Meldung.
 - **Update-Hinweis:** Store-Installationen aktualisieren sich automatisch; das Popup nennt den Weg zum sofortigen Aktualisieren (Chrome: `chrome://extensions` → *Aktualisieren*, Firefox: `about:addons` → *Nach Updates suchen*), selbst geladene Versionen müssen neu geladen werden.
 - **Kontosperre:** `403 account_banned` von der API oder `invalid_grant` mit „Dieses Konto ist gesperrt.“ beim Token-Refresh: Die Extension meldet sich ab und zeigt „Dieses Konto ist gesperrt.“ – einmal, ohne weitere Versuche.
+
+## Sprachen
+
+Die Oberfläche gibt es auf Deutsch und Englisch: Popup, Hinweise, Systembenachrichtigungen und Hinweise im Player.
+
+- **Sprachwahl:** automatisch nach der bevorzugten Sprache des Browsers (`navigator.languages`, ersatzweise die Sprache der Browser-Oberfläche): Deutsch, wenn sie mit `de` beginnt, sonst Englisch. Im Popup unter *Einstellungen → Sprache* (*Automatisch*, *Deutsch*, *English*) festlegbar, gespeichert in `storage.local` (`language`). Der Wechsel wirkt sofort; der Hintergrund entscheidet und teilt die Sprache Popup und Content-Scripts mit.
+- **Texte:** eigene Wörterbücher in `src/lib/i18n/` (`de.ts` gibt die Schlüssel vor, `en.ts` muss per Typ genau dieselben haben), Platzhalter `{name}`, Mehrzahl über `Intl.PluralRules`, Datum und Zeit über `Intl` (`de-DE` bzw. `en-GB`). `browser.i18n` wird nur für Name und Beschreibung im Manifest genutzt (`public/_locales/{de,en}`, `default_locale: en`), weil es nicht zur Laufzeit umschalten kann. Das statische Popup-HTML trägt nur Schlüssel (`data-i18n`, `data-i18n-title`, `data-i18n-aria-label`, `data-i18n-placeholder`).
+- **Plattform-API:** Jede Anfrage an `api.synchrothek.de/v1` sendet `Accept-Language: de` bzw. `en`. Meldungen (`message`) und Einwilligungstexte (`GET /v1/consent`) kommen in dieser Sprache; die Fehlercodes bleiben gleich. Nach einem Sprachwechsel lädt die Extension die Einwilligungstexte neu.
+- **Vermittler und Sync-Server:** Deren `message` ist fest deutsch. Die Extension zeigt eigene Texte zu den bekannten Codes (`src/lib/i18n/errors.ts`, für den Sync-Server vollständig nach `ErrorCode` aus `protocol.ts`); unbekannte Codes ergeben einen allgemeinen Text mit gekürzter Servermeldung als Zusatz.
+- **Links:** auf `app.synchrothek.de` mit `?lang=de|en` (die Plattform übernimmt damit die Sprache), auf die Website zu den Seiten der Sprache (`/datenschutz` bzw. `/en/privacy` usw.). Die Anmeldung übergibt die Sprache als `lang` und `ui_locales`.
+- **Nicht übersetzt:** der Wartungshinweis (`notice` aus `GET /v1/client-config`) ist Freitext der Plattform.
 
 ## Versionsabfrage auf app.synchrothek.de
 
@@ -166,11 +177,12 @@ src/
     solo-stats.ts   Zuschauzeit beim alleine Schauen sammeln und gesammelt melden
     url-match.ts    Host-Prüfung gegen die Match-Patterns (Mediatheken, Plattform)
     series.ts       Formatname aus JSON-LD der Seite
+    i18n/           Sprache der Oberfläche: Wörterbücher (de, en), Fehlercodes von Vermittler/Sync-Server, Links
 docs/               Überblick über die offiziellen Dienste
 store/              Store-Icon (128 × 128 mit 16 px Rand)
 e2e/                End-to-End-Test mit mehreren Chromium-Profilen
 test/               Unit-Tests (`npm test`, ohne Browser)
-public/             Icons und Symbol für Benachrichtigungen
+public/             Icons, Symbol für Benachrichtigungen, _locales (Name und Beschreibung im Manifest)
 scripts/            Hilfsskripte (Protokoll übernehmen, Icons erzeugen)
 wxt.config.ts       Build- und Manifest-Konfiguration
 ```
@@ -185,7 +197,7 @@ wxt.config.ts       Build- und Manifest-Konfiguration
 ## Tests
 
 ```sh
-npm test            # Unit-Tests: API-Client, gemeinsam/allein, Zählung allein, Host-Prüfung, Einladungen (Node, ohne Browser)
+npm test            # Unit-Tests: API-Client, gemeinsam/allein, Zählung allein, Host-Prüfung, Einladungen, Sprachen (Node, ohne Browser)
 npm run e2e:setup   # einmalig: Chromium für Playwright + Testvideo (braucht ffmpeg)
 npm run test:e2e    # baut die Extension im Testmodus und startet den Test
 ```
@@ -220,7 +232,7 @@ Das Firefox-Manifest erklärt unter `data_collection_permissions.required`, was 
 | `websiteContent` | Titel und Formatname der Sendung, Notizen zu Markern |
 | `authenticationInfo` | Anmelde-Token an die offizielle Plattform und den offiziellen Sync-Dienst |
 
-Alles als „erforderlich“, weil schon das gemeinsame Schauen ohne Konto Name, Adresse und Wiedergabezustand an den Server sendet; Schauverlauf an die Plattform geht zusätzlich nur mit Einwilligung. Details: [`docs/offizielle-dienste.md`](docs/offizielle-dienste.md) und die [Datenschutzerklärung](https://synchrothek.de/datenschutz).
+Alles als „erforderlich“, weil schon das gemeinsame Schauen ohne Konto Name, Adresse und Wiedergabezustand an den Server sendet; Schauverlauf an die Plattform geht zusätzlich nur mit Einwilligung. Details: [`docs/offizielle-dienste.md`](docs/offizielle-dienste.md) und die [Datenschutzerklärung](https://synchrothek.de/datenschutz) ([English](https://synchrothek.de/en/privacy)).
 
 Das Popup nutzt die Schrift IBM Plex (SIL Open Font License 1.1, über `@fontsource`). Sie wird lokal mitgeliefert, nicht von Google Fonts geladen; die Lizenztexte liegen im Build unter `fonts/`.
 

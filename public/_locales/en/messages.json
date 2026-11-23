@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Synchrothek",
+    "description": "Extension name (the same in all languages)"
+  },
+  "extDescription": {
+    "message": "Watch Germany's public broadcasters' media libraries together: play, pause and position in sync – everyone in the official player.",
+    "description": "Short description for the stores and the extensions page, at most 132 characters, no broadcaster names"
+  }
+}

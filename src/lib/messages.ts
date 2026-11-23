@@ -1,6 +1,7 @@
 /** Nachrichten zwischen Background, Content-Script und Popup (intern, nicht über das Netz). */
 import type { BasePurpose, DataContext, Friend, Marker, ProgressItem, Purpose, RoomInvite, StatsSummary } from './api';
 import type { AccountStatus } from './auth';
+import type { Lang, LangSetting } from './i18n/index.ts';
 import type { ControlMode, MemberInfo, PlaybackAction, RoomSettings, ServerInfo } from './protocol';
 
 /** Erwarteter Raumzustand für das Content-Script. `position` gilt zum Zeitpunkt `at` (lokale Uhr). */
@@ -20,7 +21,8 @@ export type ToContent =
   | { type: 'room'; inRoom: false }
   | ({ type: 'control' } & ControlCommand)
   | { type: 'positionRequest' }
-  | { type: 'notice'; text: string }
+  | { type: 'lang'; lang: Lang } // Sprache der Hinweise im Player (beim Verbinden und bei jedem Wechsel)
+  | { type: 'notice'; text: string } // schon übersetzt
   | { type: 'resume'; url: string; position: number | null } // Antwort auf resumeQuery (null = nichts anbieten)
   | { type: 'seekTo'; position: number }
   | { type: 'snapshotRequest'; id: number };
@@ -64,6 +66,7 @@ export type PopupCommand =
   | { cmd: 'setServer'; url: string }
   | { cmd: 'resetServer' }
   | { cmd: 'setName'; name: string }
+  | { cmd: 'setLanguage'; value: LangSetting } // wirkt sofort in Popup, Hintergrund und Content-Scripts
   | { cmd: 'useAccountName' } // wieder den Namen aus dem Konto verwenden
   | ({ cmd: 'control' } & ControlCommand)
   | { cmd: 'sync' }
@@ -94,7 +97,7 @@ export type NoticeRetry = { action: 'create' } | { action: 'join'; code: string 
 
 export interface Notice {
   kind: 'error' | 'info';
-  text: string;
+  text: string; // in der aktuellen Sprache
   retry?: NoticeRetry;
 }
 
@@ -134,6 +137,8 @@ export interface SocialStatus {
 }
 
 export interface PopupStatus {
+  lang: Lang; // Sprache der Oberfläche (aufgelöst)
+  langSetting: LangSetting; // Einstellung: automatisch (Browser) oder fest
   serverUrl: string;
   isDefaultServer: boolean;
   server: ServerInfo | null;

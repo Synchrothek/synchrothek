@@ -13,25 +13,31 @@ import { PURPOSES, type BasePurpose, type Friend, type Marker, type ProgressItem
 import { API_HOST_MATCH } from '../../lib/config';
 import type { ConsentView, FeaturesStatus, PopupCommand, PopupStatus, SocialStatus, ToPopup } from '../../lib/messages';
 import type { MemberInfo } from '../../lib/protocol';
+import {
+  browserLanguages,
+  formatDate,
+  formatTime,
+  LANG_STORAGE_KEY,
+  resolveLanguage,
+  setLanguage,
+  t,
+  type Lang,
+  type LangSetting,
+  type MessageKey,
+} from '../../lib/i18n';
+import { appLink, isSitePage, siteLink } from '../../lib/i18n/links';
 import { formatDuration, formatPosition } from '../../lib/time';
 import { basePurposeOf, isSoloPurpose, soloPurposeOf } from '../../lib/watch-context';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const CONN_LABELS = { open: 'Verbunden', connecting: 'Verbinde …', idle: 'Getrennt' } as const;
-const PURPOSE_LABELS: Record<BasePurpose, string> = { watch_progress: 'Weiterschauen', markers: 'Marker', statistics: 'Statistik' };
+const baseLabel = (p: BasePurpose) => t(`purpose.${p}`);
 const purposeLabel = (p: Purpose) =>
-  isSoloPurpose(p) ? `${PURPOSE_LABELS[basePurposeOf(p)]} auch allein` : PURPOSE_LABELS[p as BasePurpose];
-/** Was „Auch beim alleine Schauen“ je Funktion bewirkt (Einwilligungstext kommt von der Plattform). */
-const SOLO_HINTS: Record<BasePurpose, string> = {
-  watch_progress: 'Speichert den Stand auch, wenn du ohne Raum schaust.',
-  markers: 'Marker auch setzen, wenn du ohne Raum schaust.',
-  statistics: 'Die Extension zählt die Zeit, wenn du ohne Raum schaust.',
-};
-const LIB_TABS: { key: LibTab; purpose: BasePurpose; label: string }[] = [
-  { key: 'wp', purpose: 'watch_progress', label: 'Weiterschauen' },
-  { key: 'mk', purpose: 'markers', label: 'Marker' },
-  { key: 'st', purpose: 'statistics', label: 'Statistik' },
+  isSoloPurpose(p) ? t('purpose.soloShort', { label: baseLabel(basePurposeOf(p)) }) : baseLabel(p as BasePurpose);
+const LIB_TABS: { key: LibTab; purpose: BasePurpose }[] = [
+  { key: 'wp', purpose: 'watch_progress' },
+  { key: 'mk', purpose: 'markers' },
+  { key: 'st', purpose: 'statistics' },
 ];
 const SEEK_STEP = 10;
 const ARM_MS = 3000;
@@ -78,6 +84,45 @@ function renderList(id: string, key: unknown, build: () => HTMLElement[]) {
 
 function rerender() {
   if (lastStatus) render(lastStatus);
+}
+
+// ---------------------------------------------------------------------------
+// Sprache: statische Texte (data-i18n*) und Links füllen; dynamische Texte entstehen beim Rendern
+// ---------------------------------------------------------------------------
+
+let appliedLang: Lang | null = null;
+
+const I18N_ATTRIBUTES = [
+  ['data-i18n-title', 'title'],
+  ['data-i18n-aria-label', 'aria-label'],
+  ['data-i18n-placeholder', 'placeholder'],
+] as const;
+
+function applyLanguage(lang: Lang) {
+  setLanguage(lang);
+  if (appliedLang === lang) return;
+  appliedLang = lang;
+  document.documentElement.lang = lang;
+  for (const node of document.querySelectorAll<HTMLElement>('[data-i18n]')) node.textContent = t(node.dataset.i18n as MessageKey);
+  for (const [data, attr] of I18N_ATTRIBUTES) {
+    for (const node of document.querySelectorAll<HTMLElement>(`[${data}]`)) node.setAttribute(attr, t(node.getAttribute(data) as MessageKey));
+  }
+  // Plattform mit ?lang=, Website mit den Seiten der Sprache
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-app-link]')) a.href = appLink(a.dataset.appLink!);
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-site-link]')) {
+    const [page, hash] = a.dataset.siteLink!.split('#');
+    if (isSitePage(page)) a.href = siteLink(page, hash);
+  }
+  rendered.clear(); // Listen in der neuen Sprache neu aufbauen
+}
+
+/** Sprache vor der ersten Antwort des Hintergrunds (gleiche Regel wie dort), damit nichts leer bleibt. */
+async function guessLanguage(): Promise<Lang> {
+  let setting: unknown;
+  try {
+    setting = (await browser.storage.local.get(LANG_STORAGE_KEY))[LANG_STORAGE_KEY];
+  } catch {}
+  return resolveLanguage(setting, browserLanguages(), browser.i18n?.getUILanguage?.());
 }
 
 // ---------------------------------------------------------------------------
@@ -194,15 +239,6 @@ function armButton(key: string, label: string, confirmLabel: string, className: 
   return b;
 }
 
-function formatDate(iso: string | null): string {
-  const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('de-DE') : '';
-}
-
-function formatTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-}
-
 function minutesLeft(iso: string): number {
   return Math.max(1, Math.ceil((Date.parse(iso) - Date.now()) / 60_000));
 }
@@ -210,9 +246,9 @@ function minutesLeft(iso: string): number {
 /** Lesbare Notlösung, wenn der Titel der Sendung (noch) unbekannt ist. */
 function urlLabel(url: string): string {
   try {
-    return `Sendung auf ${new URL(url).hostname.replace(/^www\./, '')}`;
+    return t('show.onHost', { host: new URL(url).hostname.replace(/^www\./, '') });
   } catch {
-    return 'Sendung';
+    return t('show.generic');
   }
 }
 
@@ -224,8 +260,9 @@ function renderChrome(s: PopupStatus) {
   const connected = s.conn === 'open' && (s.inRoom || s.pending);
   const conn = s.conn === 'connecting' ? 'connecting' : connected ? 'open' : 'idle';
   $('conn-dot').className = `dot ${conn}`;
-  $('conn-text').textContent = CONN_LABELS[conn];
-  $('conn').title = `${CONN_LABELS[conn]} – ${s.serverUrl}`;
+  const connLabel = t(`conn.${conn}`);
+  $('conn-text').textContent = connLabel;
+  $('conn').title = `${connLabel} – ${s.serverUrl}`;
 
   const account = s.account;
   $('login-top').hidden = account.state !== 'signedOut';
@@ -236,7 +273,7 @@ function renderChrome(s: PopupStatus) {
 
   $('tabs').hidden = ui.settings;
   $('settings-rule').hidden = !ui.settings;
-  $('tab-room-label').textContent = s.inRoom ? 'Raum' : 'Gemeinsam schauen';
+  $('tab-room-label').textContent = t(s.inRoom ? 'tabs.room' : 'tabs.watchTogether');
   const invites = s.social.invites.length;
   $('tab-badge').hidden = invites === 0;
   $('tab-badge').textContent = String(invites);
@@ -246,7 +283,8 @@ function renderChrome(s: PopupStatus) {
   // Plattform: Update-Aufforderung und Wartungshinweis (nur als Text)
   const update = s.platform.update;
   $('update-banner').hidden = !update;
-  if (update) $('update-text').textContent = `Du nutzt Version ${update.current}, benötigt wird mindestens ${update.minimum}. ${updateHow(s)}`;
+  if (update) $('update-text').textContent = t('update.text', { current: update.current, minimum: update.minimum, how: updateHow(s) });
+  // Wartungshinweis: Freitext der Plattform, unverändert
   $('service-notice').hidden = !s.platform.notice;
   $('service-notice-text').textContent = s.platform.notice ?? '';
 
@@ -259,13 +297,9 @@ function renderChrome(s: PopupStatus) {
 /** Wie man aktualisiert: Store-Installationen aktualisieren sich selbst, selbst geladene nicht. */
 function updateHow(s: PopupStatus): string {
   if (import.meta.env.FIREFOX) {
-    return s.installType === 'development'
-      ? 'Lade die neue Version unter about:debugging erneut.'
-      : 'Firefox aktualisiert Add-ons automatisch. Sofort: about:addons → Zahnrad → „Nach Updates suchen“.';
+    return t(s.installType === 'development' ? 'update.firefoxDev' : 'update.firefox');
   }
-  return s.installType === 'development'
-    ? 'Lade die neue Version unter chrome://extensions erneut.'
-    : 'Chrome aktualisiert Erweiterungen automatisch. Sofort: chrome://extensions → Entwicklermodus → „Aktualisieren“.';
+  return t(s.installType === 'development' ? 'update.chromeDev' : 'update.chrome');
 }
 
 // ---------------------------------------------------------------------------
@@ -282,17 +316,17 @@ function renderInvites(social: SocialStatus, s: PopupStatus) {
       const card = el('div', 'invite');
       const main = el('div', 'invite-main');
       const text = el('div', 'invite-text');
-      text.append(el('strong', '', invite.from.username), invite.title ? ' lädt dich ein: ' : ' lädt dich in einen Raum ein.');
-      if (invite.title) text.append(el('em', '', invite.title));
+      text.append(el('strong', '', invite.from.username), ` ${t(invite.title ? 'invites.withTitle' : 'invites.noTitle')}`);
+      if (invite.title) text.append(' ', el('em', '', invite.title));
       const body = el('div', 'grow stack-2');
-      body.append(text, el('div', 'hint', `Gilt noch ${minutes[i]} Min.`));
+      body.append(text, el('div', 'hint', t('invites.validFor', { minutes: minutes[i]! })));
       main.append(el('span', 'avatar surface', initial(invite.from.username)), body);
       const actions = el('div', 'invite-actions');
-      const accept = button('Beitreten', 'accept', () => send({ cmd: 'acceptInvite', id: invite.id }));
-      if (s.inRoom) accept.title = 'Du verlässt dabei deinen aktuellen Raum.';
-      actions.append(accept, button('Ablehnen', 'decline', () => send({ cmd: 'declineInvite', id: invite.id })));
+      const accept = button(t('lobby.join'), 'accept', () => send({ cmd: 'acceptInvite', id: invite.id }));
+      if (s.inRoom) accept.title = t('invites.leavesRoom');
+      actions.append(accept, button(t('invites.decline'), 'decline', () => send({ cmd: 'declineInvite', id: invite.id })));
       card.append(main, actions);
-      if (s.inRoom) card.append(el('div', 'invite-leave', 'Du verlässt dabei deinen aktuellen Raum.'));
+      if (s.inRoom) card.append(el('div', 'invite-leave', t('invites.leavesRoom')));
       return card;
     }),
   );
@@ -305,7 +339,7 @@ function renderInvites(social: SocialStatus, s: PopupStatus) {
 function renderLobby(s: PopupStatus, visible: boolean) {
   $('lobby').hidden = !visible;
   $('pending').hidden = !(ui.tab === 'room' && !ui.settings && s.pending);
-  $('pending-sub').textContent = s.code ? `Raum ${s.code} wird gesucht` : 'Raum wird erstellt';
+  $('pending-sub').textContent = s.code ? t('pending.searching', { code: s.code }) : t('pending.creating');
   if (!visible) return;
   $('create-hint').hidden = s.tab.hasVideo;
   $('join-hint').hidden = !s.autoFollow;
@@ -315,11 +349,11 @@ function renderLobby(s: PopupStatus, visible: boolean) {
 
 /** Zustand der Sendung im Raum-Tab: Text und Farbe des Punkts. */
 function contentStatus(s: PopupStatus): [string, string] {
-  if (!s.tab.isBound) return ['läuft in einem anderen Tab', ''];
-  if (!s.room?.url) return ['noch keine – starte eine Sendung in diesem Tab', ''];
-  if (s.tab.onRoomContent) return ['verbunden', 'ok'];
-  if (s.tab.hasVideo) return ['du schaust gerade etwas anderes', 'danger'];
-  return s.autoFollow ? ['wird geöffnet …', 'accent'] : ['nicht geöffnet', ''];
+  if (!s.tab.isBound) return [t('room.status.otherTab'), ''];
+  if (!s.room?.url) return [t('room.status.none'), ''];
+  if (s.tab.onRoomContent) return [t('room.status.connected'), 'ok'];
+  if (s.tab.hasVideo) return [t('room.status.other'), 'danger'];
+  return s.autoFollow ? [t('room.status.opening'), 'accent'] : [t('room.status.notOpen'), ''];
 }
 
 /**
@@ -331,10 +365,10 @@ function accountLimitsHint(s: PopupStatus): string | null {
   const room = s.room;
   if (!defaults || !room) return null;
   const parts: string[] = [];
-  if (defaults.maxRoomDurationMinutes > 0 && room.closesAt === null) parts.push('keine Zeitbegrenzung');
+  if (defaults.maxRoomDurationMinutes > 0 && room.closesAt === null) parts.push(t('room.limits.noTimeLimit'));
   const more = defaults.maxRoomMembers > 0 && (room.memberLimit === 0 || room.memberLimit > defaults.maxRoomMembers);
-  if (more) parts.push(room.memberLimit === 0 ? 'unbegrenzt viele Teilnehmende' : `bis zu ${room.memberLimit} Teilnehmende`);
-  return parts.length ? `Raum mit deinem Konto erstellt: ${parts.join(', ')}` : null;
+  if (more) parts.push(room.memberLimit === 0 ? t('room.limits.unlimitedMembers') : t('room.limits.upTo', { count: room.memberLimit }));
+  return parts.length ? t('room.limits.hint', { parts: parts.join(', ') }) : null;
 }
 
 function sortedMembers(s: PopupStatus): MemberInfo[] {
@@ -354,15 +388,15 @@ function renderRoom(s: PopupStatus, visible: boolean) {
 
   $('host-badge').hidden = !s.isHost;
   $('closes').hidden = room.closesAt === null;
-  if (room.closesAt !== null) $('closes').textContent = `Raum endet um ${formatTime(room.closesAt)} Uhr`;
+  if (room.closesAt !== null) $('closes').textContent = t('room.closesAt', { time: formatTime(room.closesAt) });
   $('code-text').textContent = s.code ?? '';
-  $('copy-label').textContent = ui.copied ? 'Kopiert' : 'Kopieren';
+  $('copy-label').textContent = t(ui.copied ? 'room.copied' : 'room.copy');
   const accountHint = room.createdWithAccount ? accountLimitsHint(s) : null;
   $('account-room').hidden = !accountHint;
   $('account-room').textContent = accountHint ?? '';
 
   // Sendung
-  const title = room.url ? (room.title ?? urlLabel(room.url)) : 'Noch keine Sendung';
+  const title = room.url ? (room.title ?? urlLabel(room.url)) : t('room.noShow');
   $('video-title').textContent = title;
   $('video-title').classList.toggle('empty', !room.url);
   const [statusText, statusDot] = contentStatus(s);
@@ -374,7 +408,7 @@ function renderRoom(s: PopupStatus, visible: boolean) {
   if (onRoom) {
     const pos = s.tab.position;
     const dur = s.tab.duration;
-    $('playback-label').textContent = `${room.playing ? 'Läuft' : 'Pausiert'}${pos !== null ? ` · ${formatPosition(pos)}` : ''}`;
+    $('playback-label').textContent = `${t(room.playing ? 'room.playing' : 'room.paused')}${pos !== null ? ` · ${formatPosition(pos)}` : ''}`;
     $('playback-duration').textContent = dur ? formatPosition(dur) : '';
     $('playback-bar').style.width = pos !== null && dur ? `${Math.min(100, (pos / dur) * 100)}%` : '0';
   }
@@ -398,10 +432,15 @@ function renderRoom(s: PopupStatus, visible: boolean) {
     members.slice(0, 4).map((m) => el('span', m.connected ? '' : 'offline', initial(m.name))),
   );
   $('go-friends').hidden = !s.social.canInvite;
-  $('friends-summary').textContent = s.social.invited.length ? `${s.social.invited.length} eingeladen` : 'Aus deiner Freundesliste';
+  $('friends-summary').textContent = s.social.invited.length
+    ? t('friends.invitedCount', { count: s.social.invited.length })
+    : t('friends.fromList');
   $('go-room-settings').hidden = !s.isHost;
   const max = room.settings.maxMembers;
-  $('rs-summary').textContent = `max. ${max > 0 ? max : '∞'} · ${room.settings.controlMode === 'all' ? 'alle steuern' : 'nur der Host steuert'}`;
+  $('rs-summary').textContent = t('roomSettings.summary', {
+    max: max > 0 ? max : '∞',
+    mode: t(room.settings.controlMode === 'all' ? 'roomSettings.summaryAll' : 'roomSettings.summaryHost'),
+  });
   // Trennlinien nur zwischen sichtbaren Zeilen
   const rows = ['go-members', 'go-friends', 'go-room-settings'].map((id) => $(id)).filter((r) => !r.hidden);
   rows.forEach((r, i) => r.classList.toggle('divided', i > 0));
@@ -418,7 +457,9 @@ function renderMembers(s: PopupStatus, visible: boolean) {
     members.map((m) => {
       const row = el('div', 'member');
       const avatar = el('span', `avatar${m.connected ? '' : ' offline'}`, initial(m.name));
-      const tags = [m.id === s.me && 'du', m.id === room.hostId && 'Host', !m.connected && 'getrennt'].filter(Boolean).join(' · ');
+      const tags = [m.id === s.me && t('members.you'), m.id === room.hostId && t('room.host'), !m.connected && t('members.disconnected')]
+        .filter(Boolean)
+        .join(' · ');
       const name = el('span', `name grow ellipsis${m.connected ? '' : ' offline'}`, m.name); // fremder Name: nur Text
       name.title = m.name;
       if (tags) name.append(' ', el('span', 'tags', tags));
@@ -426,11 +467,13 @@ function renderMembers(s: PopupStatus, visible: boolean) {
       if (s.isHost && m.id !== s.me) {
         const actions = el('div', 'member-actions');
         if (m.connected) {
-          actions.append(armButton(`host:${m.id}`, 'Host', 'Host machen?', 'act', () => send({ cmd: 'transferHost', memberId: m.id }), 'Zum Host machen'));
+          actions.append(
+            armButton(`host:${m.id}`, t('room.host'), t('members.makeHostConfirm'), 'act', () => send({ cmd: 'transferHost', memberId: m.id }), t('members.makeHost')),
+          );
         }
         actions.append(
-          armButton(`kick:${m.id}`, 'Entfernen', 'Sicher?', 'act', () => send({ cmd: 'kick', memberId: m.id, ban: false })),
-          armButton(`ban:${m.id}`, 'Bannen', 'Sicher?', 'act', () => send({ cmd: 'kick', memberId: m.id, ban: true })),
+          armButton(`kick:${m.id}`, t('members.kick'), t('common.sure'), 'act', () => send({ cmd: 'kick', memberId: m.id, ban: false })),
+          armButton(`ban:${m.id}`, t('members.ban'), t('common.sure'), 'act', () => send({ cmd: 'kick', memberId: m.id, ban: true })),
         );
         row.append(actions);
       }
@@ -452,14 +495,14 @@ function renderFriends(s: PopupStatus, visible: boolean) {
     (friends ?? []).map((friend: Friend) => {
       const row = el('div', 'friend');
       const done = social.invited.includes(friend.id);
-      const invite = button(done ? 'Erneut einladen' : 'Einladen', 'btn xs', () => send({ cmd: 'inviteFriend', friendId: friend.id }));
+      const invite = button(t(done ? 'friends.inviteAgain' : 'friends.invite'), 'btn xs', () => send({ cmd: 'inviteFriend', friendId: friend.id }));
       invite.disabled = social.busy;
       const name = el('span', 'grow ellipsis', friend.username);
       name.title = friend.username;
       const avatar = el('span', 'avatar');
       fillAvatar(avatar, friend.username, friend.avatarUrl, { lazy: true });
       row.append(avatar, name);
-      if (done) row.append(el('span', 'hint', 'eingeladen'));
+      if (done) row.append(el('span', 'hint', t('friends.invited')));
       row.append(invite);
       return row;
     }),
@@ -484,7 +527,7 @@ function renderRoomSettings(s: PopupStatus, visible: boolean) {
   if (ui.maxDraft !== null && ui.maxDraft === settings.maxMembers) ui.maxDraft = null;
   const current = ui.maxDraft ?? settings.maxMembers;
   $('max-value').textContent = current > 0 ? String(current) : '∞';
-  $('max-value').title = current > 0 ? '' : 'unbegrenzt';
+  $('max-value').title = current > 0 ? '' : t('roomSettings.unlimited');
   $<HTMLButtonElement>('max-dec').disabled = maxStep(s, current, -1) === current;
   $<HTMLButtonElement>('max-inc').disabled = maxStep(s, current, 1) === current;
   $('mode-all').setAttribute('aria-pressed', String(settings.controlMode === 'all'));
@@ -525,15 +568,15 @@ function renderLibrary(s: PopupStatus, visible: boolean) {
   if (f.state !== 'ready' || !f.consent) return;
 
   // Nur Funktionen, die die Plattform kennt
-  const tabs = LIB_TABS.filter((t) => f.consent?.[t.purpose]);
-  if (!tabs.some((t) => t.key === ui.libTab) && tabs[0]) ui.libTab = tabs[0].key;
-  renderList('lib-tabs', [tabs.map((t) => t.key), ui.libTab], () =>
-    tabs.map((t) => {
-      const b = button(t.label, '', () => {
-        ui.libTab = t.key;
+  const tabs = LIB_TABS.filter((tab) => f.consent?.[tab.purpose]);
+  if (!tabs.some((tab) => tab.key === ui.libTab) && tabs[0]) ui.libTab = tabs[0].key;
+  renderList('lib-tabs', [tabs.map((tab) => tab.key), ui.libTab], () =>
+    tabs.map((tab) => {
+      const b = button(baseLabel(tab.purpose), '', () => {
+        ui.libTab = tab.key;
         rerender();
       });
-      b.setAttribute('aria-pressed', String(ui.libTab === t.key));
+      b.setAttribute('aria-pressed', String(ui.libTab === tab.key));
       return b;
     }),
   );
@@ -544,7 +587,7 @@ function renderLibrary(s: PopupStatus, visible: boolean) {
   const outdated = outdatedPurposes(f);
   $('lib-outdated').hidden = outdated.length === 0;
   $('lib-outdated-text').textContent = outdated.length
-    ? `Für ${outdated.map(purposeLabel).join(', ')} gibt es eine neue Fassung des Einwilligungstexts.`
+    ? t('library.outdated', { purposes: outdated.map(purposeLabel).join(', ') })
     : '';
 
   renderProgressPane(f, ui.libTab === 'wp');
@@ -579,15 +622,15 @@ function renderSoloBox(f: FeaturesStatus, base: BasePurpose) {
     row.setAttribute('aria-checked', String(c.granted));
     row.disabled = f.busy;
     const text = el('span', 'nav-text grow');
-    const hint = ui.armed === armKey ? 'Erneut klicken: ausschalten und Allein-Daten löschen' : SOLO_HINTS[base];
-    text.append(el('span', 'strong-500', 'Auch beim alleine Schauen'), el('span', 'hint', hint));
+    const hint = ui.armed === armKey ? t('solo.turnOffConfirm') : t(`solo.hint.${base}`);
+    text.append(el('span', 'strong-500', t('solo.label')), el('span', 'hint', hint));
     const sw = el('span', 'switch');
     sw.append(el('span'));
     row.append(text, sw);
     const items: HTMLElement[] = [row];
     if (c.granted) {
       items.push(
-        armButton(`soloData:${base}`, 'Allein-Daten löschen', 'Wirklich alle Allein-Daten löschen?', 'text-link small', () =>
+        armButton(`soloData:${base}`, t('solo.deleteData'), t('solo.deleteDataConfirm'), 'text-link small', () =>
           send({ cmd: 'deleteSoloData', purpose: base }),
         ),
       );
@@ -596,7 +639,7 @@ function renderSoloBox(f: FeaturesStatus, base: BasePurpose) {
   });
 }
 
-const contextTag = (context: 'room' | 'solo') => (context === 'solo' ? el('span', 'ctx-tag', 'allein') : null);
+const contextTag = (context: 'room' | 'solo') => (context === 'solo' ? el('span', 'ctx-tag', t('context.solo')) : null);
 
 function renderProgressPane(f: FeaturesStatus, visible: boolean) {
   $('lib-wp').hidden = !visible;
@@ -631,7 +674,7 @@ function renderProgressPane(f: FeaturesStatus, visible: boolean) {
       open.append(el('span', 'ellipsis', p.title), meta);
       row.append(
         open,
-        armButton(`p:${p.context}:${p.url}`, '×', 'Löschen?', 'del', () => send({ cmd: 'deleteProgress', url: p.url, context: p.context }), 'Entfernen'),
+        armButton(`p:${p.context}:${p.url}`, '×', t('common.deleteConfirm'), 'del', () => send({ cmd: 'deleteProgress', url: p.url, context: p.context }), t('common.remove')),
       );
       return row;
     }),
@@ -647,7 +690,7 @@ function renderMarkerPane(s: PopupStatus, visible: boolean) {
   $('markers-off').hidden = on;
   $('markers-on').hidden = !on;
   $('markers-context').hidden = !on || !f.show || !s.tab.title;
-  $('markers-context').textContent = s.tab.title ? `${s.tab.title} · ${f.context === 'solo' ? 'allein' : 'gemeinsam'}` : '';
+  $('markers-context').textContent = s.tab.title ? `${s.tab.title} · ${t(f.context === 'solo' ? 'context.solo' : 'context.room')}` : '';
   $('markers-context').title = s.tab.title ?? '';
   renderSoloBox(f, 'markers');
   if (!on) return;
@@ -665,9 +708,9 @@ function renderMarkerPane(s: PopupStatus, visible: boolean) {
       const text = el('span', `grow ellipsis${m.text ? '' : ' mute'}`, m.text || '–');
       if (m.text) text.title = m.text;
       row.append(
-        button(formatPosition(m.position), 'marker-seek', () => send({ cmd: 'seekTo', position: m.position }), 'Zu dieser Stelle springen'),
+        button(formatPosition(m.position), 'marker-seek', () => send({ cmd: 'seekTo', position: m.position }), t('markers.jump')),
         text,
-        armButton(`m:${m.id}`, '×', 'Löschen?', 'del', () => send({ cmd: 'deleteMarker', id: m.id }), 'Marker löschen'),
+        armButton(`m:${m.id}`, '×', t('common.deleteConfirm'), 'del', () => send({ cmd: 'deleteMarker', id: m.id }), t('markers.delete')),
       );
       return row;
     }),
@@ -694,11 +737,11 @@ function renderStatsPane(f: FeaturesStatus, visible: boolean) {
   $('stats-alone').textContent = formatDuration(stats.aloneSeconds);
   $('stats-top-block').hidden = stats.top.length === 0;
   renderList('stats-top', stats.top, () =>
-    stats.top.map((t) => {
+    stats.top.map((item) => {
       const row = el('div', 'top-item');
-      const title = el('span', 'grow ellipsis', t.title ?? t.url);
-      title.title = t.title ?? t.url;
-      row.append(title, el('span', 'hint', formatDuration(t.seconds)));
+      const title = el('span', 'grow ellipsis', item.title ?? item.url);
+      title.title = item.title ?? item.url;
+      row.append(title, el('span', 'hint', formatDuration(item.seconds)));
       return row;
     }),
   );
@@ -722,17 +765,17 @@ function renderSettings(s: PopupStatus) {
   if (account.state === 'signedIn') {
     const name = s.profile?.username ?? account.name ?? s.name;
     fillAvatar($('settings-avatar'), name, s.profile?.avatarUrl ?? null);
-    $('settings-account-name').textContent = s.profile?.username ?? account.name ?? 'Konto';
+    $('settings-account-name').textContent = s.profile?.username ?? account.name ?? t('settings.accountFallback');
   }
 
   // Mit Konto ist dessen Benutzername nur ein Vorschlag; ein selbst gewählter Name gilt auch angemeldet
   const nameInput = $<HTMLInputElement>('name-input');
   if (document.activeElement !== nameInput) nameInput.value = ui.draftName ?? s.name;
-  $('name-hint').textContent =
-    s.nameSuggestion && !s.nameChosen ? 'Vorschlag aus deinem Konto – du kannst ihn ändern.' : 'So sehen dich die anderen im Raum.';
+  $('name-hint').textContent = t(s.nameSuggestion && !s.nameChosen ? 'settings.nameSuggested' : 'settings.nameHint');
   $('name-use-account').hidden = !s.nameSuggestion || !s.nameChosen || s.nameSuggestion === s.name;
 
   $('auto-follow').setAttribute('aria-checked', String(s.autoFollow));
+  for (const value of ['auto', 'de', 'en'] as const) $(`lang-${value}`).setAttribute('aria-pressed', String(s.langSetting === value));
 
   const consent = s.features.state === 'ready' ? s.features.consent : null;
   // Zusatz-Einwilligungen nur unter erteilter Haupteinwilligung (oder solange sie selbst noch erteilt sind)
@@ -742,37 +785,39 @@ function renderSettings(s: PopupStatus) {
   $('go-consents').hidden = known.length === 0;
   const outdatedCount = known.filter((p) => consent?.[p]?.outdated).length;
   $('consent-summary').textContent =
-    `${known.filter((p) => consent?.[p]?.granted).length} von ${known.length} erteilt` +
-    (outdatedCount ? ` · ${outdatedCount} neue ${outdatedCount === 1 ? 'Fassung' : 'Fassungen'}` : '');
+    t('consents.summary', { granted: known.filter((p) => consent?.[p]?.granted).length, total: known.length }) +
+    (outdatedCount ? ` · ${t('consents.newVersions', { count: outdatedCount })}` : '');
   const server = ui.draftServer ?? s.serverUrl;
-  $('server-short').textContent = s.isDefaultServer && ui.draftServer === null ? 'Standardserver' : server;
+  $('server-short').textContent = s.isDefaultServer && ui.draftServer === null ? t('server.defaultShort') : server;
   $('go-server').classList.toggle('divided', known.length > 0);
 
   // Server
   const serverInput = $<HTMLInputElement>('server-input');
   if (document.activeElement !== serverInput) serverInput.value = server;
-  $('server-kind').textContent = s.isDefaultServer && ui.draftServer === null ? 'Standardserver des Projekts' : 'Eigener Server';
+  $('server-kind').textContent = t(s.isDefaultServer && ui.draftServer === null ? 'server.default' : 'server.custom');
   $('reset-server').hidden = s.isDefaultServer && ui.draftServer === null;
 
   // Einwilligungen
   if (ui.settingsSub === 'consents' && consent) {
-    renderList('consent-list', [known.map((p) => [p, consent[p]?.granted, consent[p]?.grantedAt, consent[p]?.outdated]), ui.armed], () =>
+    renderList('consent-list', [known.map((p) => [p, consent[p]?.granted, consent[p]?.grantedAt, consent[p]?.outdated]), ui.armed, appliedLang], () =>
       known.map((purpose) => {
         const c: ConsentView = consent[purpose]!;
         const solo = isSoloPurpose(purpose);
         const row = el('div', `consent-row${solo ? ' sub-row' : ''}`);
         const since = formatDate(c.grantedAt);
         const text = el('div', 'nav-text grow');
-        const state = c.granted ? `eingewilligt${since ? ` am ${since}` : ''}${c.outdated ? ' · neue Fassung' : ''}` : 'aus';
-        text.append(el('span', solo ? '' : 'strong-500', solo ? 'Auch beim alleine Schauen' : purposeLabel(purpose)), el('span', 'hint', state));
+        const state = c.granted
+          ? `${since ? t('consents.grantedOn', { date: since }) : t('consents.granted')}${c.outdated ? ` · ${t('consents.newVersion')}` : ''}`
+          : t('consents.off');
+        text.append(el('span', solo ? '' : 'strong-500', solo ? t('solo.label') : purposeLabel(purpose)), el('span', 'hint', state));
         row.append(text);
-        if (c.outdated) row.append(button('Lesen', 'consent-btn', () => openConsent(purpose)));
+        if (c.outdated) row.append(button(t('consents.read'), 'consent-btn', () => openConsent(purpose)));
         row.append(
           c.granted
-            ? armButton(`c:${purpose}`, 'Widerrufen', solo ? 'Allein-Daten löschen?' : 'Alles löschen?', 'consent-btn granted', () =>
+            ? armButton(`c:${purpose}`, t('consents.revoke'), t(solo ? 'consents.revokeSoloConfirm' : 'consents.revokeConfirm'), 'consent-btn granted', () =>
                 send({ cmd: 'revokeConsent', purpose }),
               )
-            : button('Einwilligen', 'consent-btn', () => openConsent(purpose)),
+            : button(t('consent.accept'), 'consent-btn', () => openConsent(purpose)),
         );
         return row;
       }),
@@ -838,7 +883,7 @@ function renderConsentDialog(f: FeaturesStatus) {
     text.textContent = consent.text;
     text.scrollTop = 0;
   }
-  $('consent-version').textContent = `Version ${consent.currentVersion}`;
+  $('consent-version').textContent = t('consent.version', { version: consent.currentVersion });
   $('consent-accept').dataset.version = consent.currentVersion;
   $<HTMLButtonElement>('consent-accept').disabled = f.busy;
   $('consent-error').hidden = !f.error;
@@ -849,6 +894,7 @@ function renderConsentDialog(f: FeaturesStatus) {
 
 function render(s: PopupStatus) {
   lastStatus = s;
+  applyLanguage(s.lang);
   // Unteransichten schließen, wenn sie nicht mehr passen (z. B. Raum verlassen, Host-Rolle abgegeben)
   if (!s.inRoom) ui.roomSub = null;
   if (ui.roomSub === 'friends' && !s.social.canInvite) ui.roomSub = null;
@@ -909,7 +955,8 @@ async function restoreView() {
 }
 
 async function main() {
-  const [[tab]] = await Promise.all([browser.tabs.query({ active: true, currentWindow: true }), restoreView()]);
+  const [[tab], lang] = await Promise.all([browser.tabs.query({ active: true, currentWindow: true }), guessLanguage(), restoreView()]);
+  applyLanguage(lang);
   const port = browser.runtime.connect({ name: 'popup' });
   port.onMessage.addListener((msg: ToPopup) => {
     if (msg.type === 'status') render(msg.status);
@@ -1056,6 +1103,10 @@ async function main() {
     saveView();
   });
   click('auto-follow', () => send({ cmd: 'setAutoFollow', value: !lastStatus?.autoFollow }));
+  // Sprache wirkt sofort (nicht erst mit „Speichern“)
+  for (const value of ['auto', 'de', 'en'] as const satisfies readonly LangSetting[]) {
+    click(`lang-${value}`, () => send({ cmd: 'setLanguage', value }));
+  }
   click('go-consents', () => {
     ui.settingsSub = 'consents';
     ui.armed = null;

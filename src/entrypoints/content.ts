@@ -13,6 +13,7 @@ import { browser, type Browser } from 'wxt/browser';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { MEDIATHEK_MATCHES } from '../lib/config';
 import { sameContent } from '../lib/content-url';
+import { setLanguage, t } from '../lib/i18n';
 import { formatPosition } from '../lib/time';
 import { seriesFromJsonLd } from '../lib/series';
 import { cleanTitle } from '../lib/title';
@@ -187,6 +188,10 @@ export default defineContentScript({
         case 'positionRequest':
           if (video && onRoomContent()) post({ type: 'position', position: video.currentTime, playing: !video.paused });
           break;
+        case 'lang':
+          // Sprache der Oberfläche (Einstellung im Popup oder Browser), vom Hintergrund
+          if (msg.lang === 'de' || msg.lang === 'en') setLanguage(msg.lang);
+          break;
         case 'notice':
           showToast('info', msg.text);
           break;
@@ -273,7 +278,7 @@ export default defineContentScript({
         return;
       }
       resumeGate = { url, until: Date.now() + RESUME_TOAST_MS, position };
-      showToast('resume', `▶ Synchrothek: Weiterschauen ab ${formatPosition(position)}?`);
+      showToast('resume', t('toast.resume', { position: formatPosition(position) }));
     }
 
     function acceptResume() {
@@ -434,10 +439,6 @@ export default defineContentScript({
     // Hinweise im Player (Autoplay blockiert, Ton, Raum-Meldungen)
     // -----------------------------------------------------------------------
 
-    const TOAST_TEXT: Record<Exclude<ToastKind, 'info' | 'resume'>, string> = {
-      play: '▶ Synchrothek: Klicken, um synchron mitzuschauen',
-      unmute: '🔇 Synchrothek: Klicken, um den Ton einzuschalten',
-    };
     let toastHost: HTMLElement | null = null;
     let toastKind: ToastKind | null = null;
     let toastTimer: number | undefined;
@@ -459,7 +460,7 @@ export default defineContentScript({
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent =
-        kind === 'info' ? `Synchrothek: ${text ?? ''}` : kind === 'resume' ? (text ?? '') : TOAST_TEXT[kind];
+        kind === 'info' ? `Synchrothek: ${text ?? ''}` : kind === 'resume' ? (text ?? '') : t(kind === 'play' ? 'toast.play' : 'toast.unmute');
       button.addEventListener('click', () => {
         removeToast();
         if (kind === 'unmute' && video) {

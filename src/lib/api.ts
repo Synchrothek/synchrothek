@@ -8,6 +8,7 @@
  * Ohne Abhängigkeit von `browser`, damit sich das Modul unter Node testen lässt (test/api.test.ts).
  */
 import { API_BASE_URL } from './config.ts';
+import { getLanguage, t as text, type Lang } from './i18n/index.ts';
 
 /** Hauptzwecke: gemeinsames Schauen in Räumen des offiziellen Sync-Servers. */
 export type BasePurpose = 'watch_progress' | 'markers' | 'statistics';
@@ -173,6 +174,8 @@ export interface ApiDeps {
   now?: () => number;
   /** Konto gesperrt (403 account_banned). Wird bei jeder solchen Antwort aufgerufen. */
   onAccountBanned?: () => void;
+  /** Sprache der Oberfläche für `Accept-Language` (Meldungen und Einwilligungstexte der Plattform). */
+  language?: () => Lang;
 }
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -203,9 +206,9 @@ export function apiUrl(raw: string): string | null {
 
 function show(ref: ShowRef) {
   const url = apiUrl(ref.url);
-  if (!url) throw new ApiError('invalid', 'Für diese Seite lässt sich nichts speichern.');
+  if (!url) throw new ApiError('invalid', text('api.cannotSave'));
   const title = clip(ref.title, LIMITS.titleLength) || clip(new URL(url).hostname, LIMITS.titleLength);
-  if (!Number.isFinite(ref.position)) throw new ApiError('invalid', 'Ungültige Position.');
+  if (!Number.isFinite(ref.position)) throw new ApiError('invalid', text('common.invalidPosition'));
   const series = ref.series ? clip(ref.series, LIMITS.titleLength) : '';
   return { url, title, position: seconds(ref.position), ...(series && { series }) };
 }
@@ -218,6 +221,7 @@ export function createApi({
   fetch: doFetch = globalThis.fetch.bind(globalThis),
   now = Date.now,
   onAccountBanned,
+  language = getLanguage,
 }: ApiDeps) {
   let blockedUntil = 0; // nach 429 bis hierhin nichts senden
 
@@ -226,9 +230,9 @@ export function createApi({
     try {
       t = await getAccessToken({ forceRefresh });
     } catch (err) {
-      throw new ApiError('auth', err instanceof Error && err.message ? err.message : 'Anmeldung nicht möglich.');
+      throw new ApiError('auth', err instanceof Error && err.message ? err.message : text('api.authUnavailable'));
     }
-    if (!t) throw new ApiError('signed_out', 'Nicht angemeldet.');
+    if (!t) throw new ApiError('signed_out', text('api.signedOut'));
     return t;
   }
 
@@ -246,6 +250,7 @@ export function createApi({
         headers: {
           Authorization: `Bearer ${accessToken}`,
           Accept: accept,
+          'Accept-Language': language(),
           ...(body !== undefined && { 'Content-Type': 'application/json' }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -255,14 +260,14 @@ export function createApi({
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch {
-      throw new ApiError('unavailable', 'Die Synchrothek-Plattform ist gerade nicht erreichbar.');
+      throw new ApiError('unavailable', text('api.platformUnreachable'));
     }
   }
 
   /** Anfrage mit Token. Bei 401 einmal mit erneuertem Token wiederholen; liefert die Antwort ungelesen. */
   async function authorized(method: string, path: string, body?: unknown, accept?: string): Promise<Response> {
     if (now() < blockedUntil) {
-      throw new ApiError('rate_limited', 'Zu viele Anfragen. Bitte warte einen Moment.', {
+      throw new ApiError('rate_limited', text('error.rateLimited'), {
         retryAfter: Math.ceil((blockedUntil - now()) / 1000),
       });
     }
@@ -270,29 +275,30 @@ export function createApi({
     if (res.status !== 401) return res;
 
     const data = await readJson(res);
-    if (!data) throw new ApiError('unavailable', 'Die Synchrothek-API ist gerade nicht erreichbar.', { status: 401 });
+    if (!data) throw new ApiError('unavailable', text('api.unreachable'), { status: 401 });
     // Abgelaufen oder (z. B. durch Uhrabweichung) abgelehnt: einmal mit frischem Token wiederholen
     if (data.error === 'token_expired' || data.error === 'invalid_token') {
       res = await send(method, path, await token(true), body, accept);
     }
     if (res.status === 401) {
-      throw new ApiError('reauth', 'Deine Anmeldung ist nicht mehr gültig. Bitte melde dich erneut an.', { status: 401 });
+      throw new ApiError('reauth', text('api.reauth'), { status: 401 });
     }
     return res;
   }
 
   /** Fehlerantwort der API in einen ApiError übersetzen. */
   function fail(res: Response, data: Record<string, unknown> | null): never {
-    if (!data) throw new ApiError('unavailable', 'Die Synchrothek-API ist gerade nicht erreichbar.', { status: res.status });
+    if (!data) throw new ApiError('unavailable', text('api.unreachable'), { status: res.status });
     const code = typeof data.error === 'string' ? data.error : '';
-    const message = typeof data.message === 'string' && data.message ? data.message : `Fehler ${res.status}`;
+    // `message` kommt in der Sprache aus Accept-Language; die Codes bleiben gleich
+    const message = typeof data.message === 'string' && data.message ? data.message : text('api.errorStatus', { status: res.status });
     const purpose = isPurpose(data.purpose) ? data.purpose : undefined;
     switch (res.status) {
       case 403:
         if (code === 'consent_required') throw new ApiError('consent_required', message, { status: 403, purpose });
         if (code === 'account_banned') {
           onAccountBanned?.();
-          throw new ApiError('banned', 'Dieses Konto ist gesperrt.', { status: 403 });
+          throw new ApiError('banned', text('account.banned'), { status: 403 });
         }
         break;
       case 404:
@@ -317,10 +323,10 @@ export function createApi({
               ? header
               : DEFAULT_RETRY_AFTER_S;
         blockedUntil = now() + retryAfter * 1000;
-        throw new ApiError('rate_limited', 'Zu viele Anfragen. Bitte warte einen Moment.', { status: 429, retryAfter });
+        throw new ApiError('rate_limited', text('error.rateLimited'), { status: 429, retryAfter });
       }
     }
-    if (res.status >= 500) throw new ApiError('unavailable', 'Die Synchrothek-API hat einen Fehler gemeldet.', { status: res.status });
+    if (res.status >= 500) throw new ApiError('unavailable', text('api.serverError'), { status: res.status });
     throw new ApiError('invalid', message, { status: res.status });
   }
 
@@ -359,7 +365,7 @@ export function createApi({
       if (e) consent[p] = e;
     }
     if (!consent.watch_progress && !consent.markers && !consent.statistics) {
-      throw new ApiError('unavailable', 'Unerwartete Antwort der Synchrothek-API.');
+      throw new ApiError('unavailable', text('api.unexpected'));
     }
     return consent;
   }
@@ -541,7 +547,7 @@ export function createApi({
     async getMe(): Promise<Me> {
       const data = await call('GET', '/me');
       const person = personFrom(data);
-      if (!person) throw new ApiError('unavailable', 'Unerwartete Antwort der Synchrothek-API.');
+      if (!person) throw new ApiError('unavailable', text('api.unexpected'));
       return { ...person, avatarUrl: avatarUrlFrom(data.avatarUrl) };
     },
 
@@ -557,7 +563,7 @@ export function createApi({
       const type = res.headers.get('content-type') ?? '';
       if (res.ok && type.startsWith('image/')) {
         const blob = await res.blob();
-        if (blob.size > AVATAR_MAX_BYTES) throw new ApiError('invalid', 'Profilbild zu groß.');
+        if (blob.size > AVATAR_MAX_BYTES) throw new ApiError('invalid', text('api.avatarTooLarge'));
         return blob;
       }
       fail(res, await readJson(res));
@@ -566,7 +572,7 @@ export function createApi({
     /** Lädt einen bestätigten Freund (Konto-ID) in einen Raum des offiziellen Sync-Servers ein. */
     async createRoomInvite(friendId: string, roomCode: string, title?: string | null): Promise<void> {
       const code = roomCode.toUpperCase();
-      if (!ROOM_CODE_PATTERN.test(code)) throw new ApiError('invalid', 'Ungültiger Raumcode.');
+      if (!ROOM_CODE_PATTERN.test(code)) throw new ApiError('invalid', text('api.invalidRoomCode'));
       const body: Record<string, unknown> = { friend: friendId, roomCode: code };
       const t = title ? clip(title, LIMITS.titleLength) : '';
       if (t) body.title = t;

@@ -40,10 +40,11 @@ export default defineConfig({
     excludeSources: ['e2e/video.mp4', 'store/**'],
   },
   manifest: ({ browser, mode, command }) => ({
-    name: 'Synchrothek',
-    // Höchstens 132 Zeichen, ohne Sendernamen (Marken)
-    description:
-      'Öffentlich-rechtliche Mediatheken gemeinsam schauen: Play, Pause und Position synchron – jede Person im offiziellen Player.',
+    // Name und Beschreibung je Sprache aus public/_locales (de, en); Englisch für alle anderen Sprachen.
+    // Beschreibung höchstens 132 Zeichen, ohne Sendernamen (Marken). Die Oberfläche selbst übersetzt src/lib/i18n.
+    default_locale: 'en',
+    name: '__MSG_extName__',
+    description: '__MSG_extDescription__',
     homepage_url: 'https://synchrothek.de',
     // alarms: Einladungen in Räume regelmäßig abfragen; notifications: Einladung anzeigen
     permissions: ['storage', 'identity', 'alarms', 'notifications'],

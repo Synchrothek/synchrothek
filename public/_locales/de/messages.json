@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Synchrothek",
+    "description": "Name der Extension (in allen Sprachen gleich)"
+  },
+  "extDescription": {
+    "message": "Öffentlich-rechtliche Mediatheken gemeinsam schauen: Play, Pause und Position synchron – jede Person im offiziellen Player.",
+    "description": "Kurzbeschreibung im Store und in der Erweiterungsverwaltung, höchstens 132 Zeichen, ohne Sendernamen"
+  }
+}

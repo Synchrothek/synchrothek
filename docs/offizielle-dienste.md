@@ -25,6 +25,13 @@ Die Extension funktioniert ohne Konto und auch mit einem selbst gehosteten Sync-
 - **Ohne Einwilligung wird kein Schauverlauf gesendet.** Den Einwilligungsstand prüft zusätzlich die Plattform selbst.
 - Schauverlauf wird nicht dauerhaft lokal gespeichert, nur kurz im Speicher bis zum nächsten Senden.
 
+## Sprache
+
+- An die Plattform-API geht bei jeder Anfrage `Accept-Language: de` oder `en` (Sprache der Oberfläche der Extension). Die Plattform liefert `message` und Einwilligungstexte in dieser Sprache; die Fehlercodes sind in beiden Sprachen gleich.
+- Vermittler und Sync-Knoten bekommen keine Sprachangabe. Die Extension übersetzt deren Fehler anhand des Codes selbst (`src/lib/i18n/errors.ts`).
+- **Selbst gehostete Sync-Server** müssen nichts tun: Angezeigt wird ein Text der Extension zum Code (`ErrorCode` aus `protocol.ts`), nicht die `message` des Servers. Nur bei Codes, die die Extension nicht kennt, steht die Meldung des Servers gekürzt als Zusatz dahinter. Neue Codes also möglichst im Server-Repo in `protocol.ts` ergänzen.
+- Links auf `app.synchrothek.de` tragen `?lang=de|en`; die Anmeldung (`/oauth2/authorize`) bekommt `lang` und `ui_locales`.
+
 ## Tokens
 
 - Access- und Refresh-Token liegen nur im Hintergrundteil der Extension (IndexedDB der Extension, für Webseiten und Content-Scripts nicht erreichbar), nie in Popup oder Content-Scripts.
@@ -32,4 +39,4 @@ Die Extension funktioniert ohne Konto und auch mit einem selbst gehosteten Sync-
 - **Nie an selbst gehostete Server**, nie in einer URL, nie über Weiterleitungen (`redirect: 'error'`), immer ohne Cookies.
 - Ob ein Server offiziell ist, entscheidet allein seine fest eingebaute Adresse, nicht eine Angabe des Servers.
 
-Datenschutzerklärung: <https://synchrothek.de/datenschutz>
+Datenschutzerklärung: <https://synchrothek.de/datenschutz> (englisch: <https://synchrothek.de/en/privacy>)

@@ -47,6 +47,10 @@ test('Abruf ohne Token und ohne Cookies; Fehler ergeben null', async () => {
   assert.equal(calls[0]?.url, `${API_BASE_URL}/client-config`);
   assert.equal(new Headers(calls[0]?.init.headers).get('authorization'), null);
   assert.equal(calls[0]?.init.credentials, 'omit');
+  // Sprache der Oberfläche (der Wartungshinweis bleibt Freitext der Plattform)
+  assert.match(new Headers(calls[0]?.init.headers).get('accept-language') ?? '', /^(de|en)$/);
+  assert.deepEqual(await fetchClientConfig(ok, 'en'), { minExtensionVersion: '0.4.0', notice: null });
+  assert.equal(new Headers(calls[1]?.init.headers).get('accept-language'), 'en');
 
   const fails = [
     async () => new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }),

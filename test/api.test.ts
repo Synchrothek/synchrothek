@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ApiError, createApi } from '../src/lib/api.ts';
 import { API_BASE_URL } from '../src/lib/config.ts';
+import { setLanguage } from '../src/lib/i18n/index.ts';
 
 interface Call {
   url: string;
@@ -304,6 +305,7 @@ test('403 account_banned: Sperre melden, kein Refresh, kein zweiter Versuch', as
     }) as typeof fetch,
     onAccountBanned: () => banned++,
   });
+  setLanguage('de');
   const err = await rejects(api.getConsent(), 'banned');
   assert.equal(err.message, 'Dieses Konto ist gesperrt.');
   assert.equal(banned, 1);
@@ -397,4 +399,44 @@ test('Allein-Daten löschen ohne Widerruf', async () => {
   assert.equal(await api.deleteSoloData('markers'), 12);
   assert.equal(nth(calls, 0).url, `${API_BASE_URL}/solo-data?purpose=markers`);
   assert.equal(nth(calls, 0).init.method, 'DELETE');
+});
+
+// --- Sprache -------------------------------------------------------------------
+
+test('Accept-Language: aktuelle Sprache der Oberfläche bei jeder Anfrage, auch beim Wiederholen', async () => {
+  let lang: 'de' | 'en' = 'en';
+  const calls: RequestInit[] = [];
+  const answers = [json(401, { error: 'token_expired', message: 'expired' }), json(200, CONSENT), json(200, CONSENT)];
+  const api = createApi({
+    getAccessToken: async () => 'tok',
+    fetch: (async (_url: string, init: RequestInit) => {
+      calls.push(init);
+      return answers.shift()!;
+    }) as typeof fetch,
+    language: () => lang,
+  });
+  await api.getConsent();
+  lang = 'de';
+  await api.getConsent();
+  assert.deepEqual(
+    calls.map((c) => new Headers(c.headers).get('accept-language')),
+    ['en', 'en', 'de'],
+  );
+});
+
+test('Accept-Language folgt ohne eigene Angabe der gesetzten Sprache; eigene Texte ebenfalls', async () => {
+  setLanguage('en');
+  const { api, calls } = setup([json(503, { error: 'unavailable', message: 'x' })]);
+  const err = await rejects(api.getConsent(), 'unavailable');
+  assert.equal(header(nth(calls, 0), 'accept-language'), 'en');
+  assert.equal(err.message, 'The Synchrothek API reported an error.');
+  setLanguage('de');
+});
+
+test('message der Plattform (schon in der Sprache aus Accept-Language) wird durchgereicht, sonst eigener Text', async () => {
+  setLanguage('en');
+  const { api } = setup([json(404, { error: 'not_friends', message: "You're not friends." }), json(400, { error: 'invalid_body' })]);
+  assert.equal((await rejects(api.createRoomInvite('f1', 'ABC234'), 'not_friends')).message, "You're not friends.");
+  assert.equal((await rejects(api.createRoomInvite('f1', 'ABC234'), 'invalid')).message, 'Error 400');
+  setLanguage('de');
 });

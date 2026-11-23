@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 – unveröffentlicht
+
+- **Englische Oberfläche:** Popup, Hinweise, Benachrichtigungen und Hinweise im Player gibt es auf Deutsch und Englisch. Die Sprache folgt dem Browser (Deutsch, wenn die bevorzugte Sprache mit `de` beginnt, sonst Englisch) und lässt sich in den Einstellungen unter *Sprache* festlegen (*Automatisch*, *Deutsch*, *English*); der Wechsel wirkt sofort. Name und Beschreibung im Manifest kommen aus `_locales` (Englisch für alle anderen Sprachen).
+- Plattform-API: Jede Anfrage sendet `Accept-Language` mit der Sprache der Oberfläche; Meldungen und Einwilligungstexte kommen in dieser Sprache, nach einem Sprachwechsel werden die Einwilligungstexte neu geladen.
+- Fehler von Vermittler und Sync-Server werden anhand ihrer Codes in der Extension übersetzt statt die Meldung des Servers anzuzeigen; unbekannte Codes zeigen einen allgemeinen Text mit gekürzter Servermeldung als Zusatz. Ob `rate_limited` die Antwort auf `auth` ist, entscheidet jetzt ein Zähler statt des Meldungstexts.
+- Links auf `app.synchrothek.de` tragen `?lang=de|en`, Links auf die Website führen zu den Seiten der Sprache (`/en/privacy` …). Die Anmeldung übergibt die Sprache (`lang`, `ui_locales`).
+- Datum, Uhrzeit, Dauer und Mehrzahl je Sprache (`Intl`). Der automatische Gastname heißt auf Englisch „Guest …“.
+
 ## 0.5.0 – 2026-11-21
 
 - **Allein-Modus:** Weiterschauen, Marker und Statistik auch beim alleine Schauen, je Funktion mit eigenem Schalter „Auch beim alleine Schauen“ und eigener Einwilligung (Standard aus). Getrennte Sammlungen „gemeinsam“/„allein“, Statistik allein misst die Extension selbst (`POST /v1/stats/solo`, gesammelt und sparsam), „Allein-Daten löschen“.

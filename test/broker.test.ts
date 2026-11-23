@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { BROKER_UNREACHABLE_TEXT, BrokerError, createBroker, isOfficialNodeUrl } from '../src/lib/broker.ts';
+import { BrokerError, createBroker, isOfficialNodeUrl } from '../src/lib/broker.ts';
+import { setLanguage, tr } from '../src/lib/i18n/index.ts';
 
 type Call = { url: string; init: RequestInit };
 
@@ -80,7 +81,8 @@ test('Erstellen: Knoten außerhalb von *.sync.synchrothek.de wird abgelehnt', as
   await rejects(createBroker({ fetch }).createRoom('tok'), 'unreachable');
 });
 
-test('Fehler des Vermittlers: Code und Meldung', async () => {
+test('Fehler des Vermittlers: Code zählt, Text kommt aus der Extension', async () => {
+  setLanguage('de');
   const { fetch } = fakeFetch([
     () => json(503, { error: 'server_full', message: 'Gerade sind alle Plätze belegt.' }),
     () => json(503, { error: 'maintenance', message: 'Wartung bis 14 Uhr.' }),
@@ -88,10 +90,16 @@ test('Fehler des Vermittlers: Code und Meldung', async () => {
     () => json(503, { error: 'auth_unavailable', message: 'Anmeldung gerade nicht prüfbar.' }),
   ]);
   const broker = createBroker({ fetch });
-  assert.equal((await rejects(broker.createRoom(null), 'server_full')).message, 'Gerade sind alle Plätze belegt.');
-  assert.equal((await rejects(broker.createRoom(null), 'maintenance')).message, 'Wartung bis 14 Uhr.');
-  await rejects(broker.createRoom('t'), 'auth_failed');
+  const full = await rejects(broker.createRoom(null), 'server_full');
+  assert.equal(full.serverMessage, 'Gerade sind alle Plätze belegt.');
+  assert.equal(tr(full.text()), 'Gerade sind alle Plätze belegt. Bitte versuch es später noch einmal.');
+  const maintenance = await rejects(broker.createRoom(null), 'maintenance');
+  setLanguage('en');
+  // Meldung des Vermittlers wird nicht angezeigt, auch nicht als Zusatz (bekannter Code)
+  assert.equal(tr(maintenance.text()), "New rooms can't be created right now due to maintenance. Please try again later.");
+  assert.match(tr((await rejects(broker.createRoom('t'), 'auth_failed')).text()), /sign in again/);
   await rejects(broker.createRoom('t'), 'auth_unavailable');
+  setLanguage('de');
 });
 
 test('Nicht erreichbar: Netzwerkfehler und fremde Fehlerseiten', async () => {
@@ -100,7 +108,8 @@ test('Nicht erreichbar: Netzwerkfehler und fremde Fehlerseiten', async () => {
     () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }),
   ]);
   const broker = createBroker({ fetch });
-  assert.equal((await rejects(broker.createRoom(null), 'unreachable')).message, BROKER_UNREACHABLE_TEXT);
+  setLanguage('de');
+  assert.equal(tr((await rejects(broker.createRoom(null), 'unreachable')).text()), 'Der Sync-Dienst ist gerade nicht erreichbar.');
   await rejects(broker.createRoom(null), 'unreachable');
 });
 
@@ -115,7 +124,8 @@ test('429: Retry-After beachten, bis dahin keine Anfrage', async () => {
   assert.equal(first.retryAfterMs, 30_000);
   now += 10_000;
   const second = await rejects(broker.lookupRoom('ABC234'), 'rate_limited');
-  assert.equal(second.message, 'Zu viele Räume.');
+  assert.equal(second.code, 'rate_limited');
+  assert.equal(second.retryAfterMs, 20_000);
   assert.equal(calls.length, 1);
   now += 21_000;
   assert.equal((await broker.lookupRoom('ABC234')).url, 'wss://n1.sync.synchrothek.de');
@@ -135,4 +145,15 @@ test('Beitreten: Knoten nachschlagen, 404 = Raum nicht gefunden', async () => {
   // Ungültiger Code: gar nicht erst fragen
   await rejects(broker.lookupRoom('ABC10O'), 'room_not_found');
   assert.equal(calls.length, 2);
+});
+
+test('Unbekannter Code: allgemeiner Text in der Sprache, Meldung des Vermittlers gekürzt als Zusatz', async () => {
+  const { fetch } = fakeFetch([() => json(418, { error: 'teapot', message: 'Ich bin eine Teekanne. '.repeat(20) })]);
+  const err = await rejects(createBroker({ fetch }).createRoom(null), 'teapot');
+  setLanguage('en');
+  const text = tr(err.text());
+  assert.ok(text.startsWith('The sync service reported an error (teapot). (server: “Ich bin eine Teekanne.'), text);
+  assert.ok(text.length < 220, text);
+  setLanguage('de');
+  assert.ok(tr(err.text()).startsWith('Der Sync-Dienst hat einen Fehler gemeldet (teapot). (Server: „'));
 });

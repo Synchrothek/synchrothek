@@ -12,26 +12,26 @@
         <span class="logo" aria-hidden="true"><span></span><span></span></span>
         <span class="brand">Synchrothek</span>
         <span class="conn" id="conn"><span id="conn-dot" class="dot"></span><span id="conn-text"></span></span>
-        <button id="login-top" class="btn sm" type="button" hidden>Anmelden</button>
-        <span id="login-top-pending" class="icon-slot" title="Anmeldung läuft im geöffneten Fenster …" hidden><span class="spin sm"></span></span>
-        <button id="avatar" class="icon-btn" type="button" aria-label="Konto und Einstellungen" title="Konto und Einstellungen" hidden>
+        <button id="login-top" class="btn sm" type="button" data-i18n="account.login" hidden></button>
+        <span id="login-top-pending" class="icon-slot" data-i18n-title="account.signingIn" hidden><span class="spin sm"></span></span>
+        <button id="avatar" class="icon-btn" type="button" data-i18n-aria-label="header.accountSettings" data-i18n-title="header.accountSettings" hidden>
           <span id="avatar-initial" class="avatar accent"></span>
         </button>
-        <button id="gear" class="icon-btn mute" type="button" aria-label="Einstellungen" title="Einstellungen" hidden>
+        <button id="gear" class="icon-btn mute" type="button" data-i18n-aria-label="header.settings" data-i18n-title="header.settings" hidden>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         </button>
       </header>
 
       <nav id="tabs" class="tabs" role="tablist">
-        <button id="tab-room" class="tab" type="button" role="tab"><span id="tab-room-label">Gemeinsam schauen</span><span id="tab-badge" class="badge" hidden></span></button>
-        <button id="tab-library" class="tab" type="button" role="tab">Meine Mediathek</button>
+        <button id="tab-room" class="tab" type="button" role="tab"><span id="tab-room-label"></span><span id="tab-badge" class="badge" hidden></span></button>
+        <button id="tab-library" class="tab" type="button" role="tab" data-i18n="tabs.library"></button>
       </nav>
       <div id="settings-rule" class="rule" hidden></div>
 
       <main id="main-scroll" class="scroll">
-        <!-- Aus GET /v1/client-config: Mindestversion und Wartungshinweis -->
+        <!-- Aus GET /v1/client-config: Mindestversion und Wartungshinweis (Freitext der Plattform, nicht übersetzt) -->
         <div id="update-banner" class="update-banner" role="alert" hidden>
-          <div class="strong">Bitte aktualisiere Synchrothek</div>
+          <div class="strong" data-i18n="update.title"></div>
           <div id="update-text" class="small pretty"></div>
         </div>
         <div id="service-notice" class="notice" role="status" hidden>
@@ -42,70 +42,70 @@
         <div id="notice" class="notice" role="status" hidden>
           <span class="notice-dot"></span>
           <div id="notice-text" class="grow pretty"></div>
-          <button id="notice-retry" class="btn ghost sm" type="button" hidden>Erneut versuchen</button>
-          <button id="notice-close" class="x" type="button" aria-label="Hinweis schließen">×</button>
+          <button id="notice-retry" class="btn ghost sm" type="button" data-i18n="common.retry" hidden></button>
+          <button id="notice-close" class="x" type="button" data-i18n-aria-label="common.closeNotice">×</button>
         </div>
 
         <!-- Einladungen von Freunden in ihre Räume -->
         <section id="invites" class="invites" hidden>
-          <div class="eyebrow">Einladungen</div>
+          <div class="eyebrow" data-i18n="invites.title"></div>
           <div id="invite-items" class="stack-8"></div>
         </section>
 
         <!-- Kein Raum -->
         <section id="lobby" class="lobby" hidden>
           <div class="stack-4">
-            <div class="h1">Gemeinsam schauen</div>
-            <div class="mute pretty">Mediathek-Inhalte synchron mit anderen ansehen.</div>
+            <div class="h1" data-i18n="tabs.watchTogether"></div>
+            <div class="mute pretty" data-i18n="lobby.subtitle"></div>
           </div>
           <div class="stack-8">
-            <button id="create" class="btn primary lg" type="button">Raum erstellen</button>
-            <div id="create-hint" class="hint">Tipp: Erstelle den Raum auf der Seite einer Sendung, dann startet sie für alle. Du kannst sie auch später auswählen.</div>
+            <button id="create" class="btn primary lg" type="button" data-i18n="lobby.create"></button>
+            <div id="create-hint" class="hint" data-i18n="lobby.createHint"></div>
           </div>
-          <div class="divider"><span></span>oder<span></span></div>
+          <div class="divider"><span></span><span data-i18n="lobby.or"></span><span></span></div>
           <form id="join-form" class="stack-8">
-            <label for="code-input" class="label">Mit Raumcode beitreten</label>
+            <label for="code-input" class="label" data-i18n="lobby.joinLabel"></label>
             <div class="row-8">
               <input id="code-input" class="input code-input" maxlength="6" placeholder="ABC123" autocomplete="off" spellcheck="false" />
-              <button class="btn lg" type="submit">Beitreten</button>
+              <button class="btn lg" type="submit" data-i18n="lobby.join"></button>
             </div>
-            <div id="join-hint" class="hint">Die Sendung des Raums öffnet sich automatisch in diesem Tab.</div>
+            <div id="join-hint" class="hint" data-i18n="lobby.joinHint"></div>
           </form>
           <div id="lobby-account-out" class="lobby-foot" hidden>
-            <div class="grow hint pretty">Gemeinsam schauen funktioniert auch ohne Konto.</div>
-            <button id="login-lobby" class="btn sm-plus" type="button">Anmelden</button>
+            <div class="grow hint pretty" data-i18n="account.worksWithout"></div>
+            <button id="login-lobby" class="btn sm-plus" type="button" data-i18n="account.login"></button>
           </div>
-          <div id="lobby-account-pending" class="lobby-foot hint" hidden><span class="spin sm"></span>Anmeldung läuft im geöffneten Fenster …</div>
+          <div id="lobby-account-pending" class="lobby-foot hint" hidden><span class="spin sm"></span><span data-i18n="account.signingIn"></span></div>
         </section>
 
         <section id="pending" class="pending" hidden>
           <span class="spin"></span>
           <div class="stack-2">
-            <div class="strong-500">Verbinde mit dem Server …</div>
+            <div class="strong-500" data-i18n="pending.connecting"></div>
             <div id="pending-sub" class="hint"></div>
           </div>
-          <button id="cancel" class="btn ghost md" type="button">Abbrechen</button>
+          <button id="cancel" class="btn ghost md" type="button" data-i18n="common.cancel"></button>
         </section>
 
         <!-- Im Raum -->
         <section id="room" class="room" hidden>
           <div class="room-head">
             <div class="row-8 center">
-              <span class="eyebrow">Raum</span>
-              <span id="host-badge" class="pill" hidden>Host</span>
+              <span class="eyebrow" data-i18n="tabs.room"></span>
+              <span id="host-badge" class="pill" data-i18n="room.host" hidden></span>
               <span class="grow"></span>
               <span id="closes" class="small mute" hidden></span>
             </div>
-            <button id="code" class="code-btn" type="button" title="Code kopieren">
+            <button id="code" class="code-btn" type="button" data-i18n-title="room.copyCode">
               <span id="code-text" class="code"></span>
-              <span class="copy small mute"><span class="copy-icon" aria-hidden="true"><span></span><span></span></span><span id="copy-label">Kopieren</span></span>
+              <span class="copy small mute"><span class="copy-icon" aria-hidden="true"><span></span><span></span></span><span id="copy-label"></span></span>
             </button>
             <div id="account-room" class="hint pretty" hidden></div>
           </div>
 
           <div class="card show-card">
             <div class="stack-3">
-              <div class="eyebrow">Sendung</div>
+              <div class="eyebrow" data-i18n="room.show"></div>
               <div id="video-title" class="show-title"></div>
               <div class="status-line"><span id="status-dot" class="dot sm"></span><span id="video-status"></span></div>
             </div>
@@ -114,84 +114,84 @@
               <div class="bar-labels mono"><span id="playback-label"></span><span id="playback-duration"></span></div>
             </div>
             <div id="controls" class="controls" hidden>
-              <button id="back" class="btn ghost seek mono" type="button" aria-label="10 Sekunden zurück" title="10 Sekunden zurück">−10</button>
-              <button id="toggle" class="play" type="button" aria-label="Abspielen oder Pausieren">
+              <button id="back" class="btn ghost seek mono" type="button" data-i18n-aria-label="room.back10" data-i18n-title="room.back10">−10</button>
+              <button id="toggle" class="play" type="button" data-i18n-aria-label="room.playPause">
                 <span id="icon-pause" class="icon-pause" hidden><span></span><span></span></span>
                 <span id="icon-play" class="icon-play"></span>
               </button>
-              <button id="forward" class="btn ghost seek mono" type="button" aria-label="10 Sekunden vor" title="10 Sekunden vor">+10</button>
+              <button id="forward" class="btn ghost seek mono" type="button" data-i18n-aria-label="room.forward10" data-i18n-title="room.forward10">+10</button>
             </div>
-            <button id="sync" class="btn sunk md" type="button" title="Springt für alle zur Position des Hosts" hidden>Alle auf meine Position synchronisieren</button>
-            <button id="share-content" class="btn primary md-plus" type="button" hidden>Diese Sendung für alle starten</button>
-            <button id="open-url" class="btn md-plus" type="button" hidden>Zur Sendung des Raums wechseln</button>
-            <button id="bind-tab" class="btn primary md-plus" type="button" hidden>Diesen Tab synchronisieren</button>
-            <div id="host-only" class="locked hint" hidden><span class="lock"></span>In diesem Raum steuert nur der Host.</div>
+            <button id="sync" class="btn sunk md" type="button" data-i18n-title="room.syncTitle" data-i18n="room.sync" hidden></button>
+            <button id="share-content" class="btn primary md-plus" type="button" data-i18n="room.shareContent" hidden></button>
+            <button id="open-url" class="btn md-plus" type="button" data-i18n="room.openUrl" hidden></button>
+            <button id="bind-tab" class="btn primary md-plus" type="button" data-i18n="room.bindTab" hidden></button>
+            <div id="host-only" class="locked hint" hidden><span class="lock"></span><span data-i18n="room.hostOnly"></span></div>
           </div>
 
           <div class="card list-card">
             <button id="go-members" class="nav-row" type="button">
-              <span class="nav-text"><span class="strong-500">Teilnehmer</span><span id="member-names" class="hint ellipsis"></span></span>
+              <span class="nav-text"><span class="strong-500" data-i18n="room.members"></span><span id="member-names" class="hint ellipsis"></span></span>
               <span id="avatar-stack" class="avatar-stack"></span>
               <span id="member-count" class="mono tiny mute"></span>
               <span class="chev">›</span>
             </button>
             <button id="go-friends" class="nav-row" type="button" hidden>
-              <span class="nav-text"><span class="strong-500">Freunde einladen</span><span id="friends-summary" class="hint"></span></span>
+              <span class="nav-text"><span class="strong-500" data-i18n="room.inviteFriends"></span><span id="friends-summary" class="hint"></span></span>
               <span class="chev">›</span>
             </button>
             <button id="go-room-settings" class="nav-row" type="button" hidden>
-              <span class="nav-text"><span class="strong-500">Raumeinstellungen</span><span id="rs-summary" class="hint"></span></span>
+              <span class="nav-text"><span class="strong-500" data-i18n="room.settings"></span><span id="rs-summary" class="hint"></span></span>
               <span class="chev">›</span>
             </button>
           </div>
           <div class="room-foot">
-            <button id="leave" class="btn ghost danger md full" type="button">Raum verlassen</button>
+            <button id="leave" class="btn ghost danger md full" type="button" data-i18n="room.leave"></button>
           </div>
         </section>
 
         <section id="sub-members" class="sub" hidden>
           <div class="sub-head">
-            <button class="back" type="button" data-back aria-label="Zurück" title="Zurück">←</button>
-            <div class="sub-title">Teilnehmer</div>
+            <button class="back" type="button" data-back data-i18n-aria-label="common.back" data-i18n-title="common.back">←</button>
+            <div class="sub-title" data-i18n="room.members"></div>
             <span id="sub-member-count" class="mono tiny mute pad-r"></span>
           </div>
           <div id="members" class="member-list"></div>
-          <button id="members-invite" class="text-link" type="button" hidden>Freunde einladen</button>
+          <button id="members-invite" class="text-link" type="button" data-i18n="room.inviteFriends" hidden></button>
         </section>
 
         <section id="sub-friends" class="sub" hidden>
           <div class="sub-head">
-            <button class="back" type="button" data-back aria-label="Zurück" title="Zurück">←</button>
-            <div class="sub-title">Freunde einladen</div>
+            <button class="back" type="button" data-back data-i18n-aria-label="common.back" data-i18n-title="common.back">←</button>
+            <div class="sub-title" data-i18n="room.inviteFriends"></div>
           </div>
           <div class="sub-body friends">
             <div id="social-error" class="inline-error" hidden></div>
-            <div id="friends-loading" class="loading-row hint" hidden><span class="spin sm"></span>Freunde werden geladen …</div>
-            <div id="friends-empty" class="hint pad-4" hidden>Du hast noch keine Freunde hinzugefügt.</div>
+            <div id="friends-loading" class="loading-row hint" hidden><span class="spin sm"></span><span data-i18n="friends.loading"></span></div>
+            <div id="friends-empty" class="hint pad-4" data-i18n="friends.empty" hidden></div>
             <div id="friend-items"></div>
-            <a class="link small pad-link" href="https://app.synchrothek.de/freunde" target="_blank" rel="noopener noreferrer">Freunde verwalten</a>
+            <a class="link small pad-link" data-app-link="/freunde" data-i18n="friends.manage" target="_blank" rel="noopener noreferrer"></a>
           </div>
         </section>
 
         <section id="sub-room-settings" class="sub" hidden>
           <div class="sub-head">
-            <button class="back" type="button" data-back aria-label="Zurück" title="Zurück">←</button>
-            <div class="sub-title">Raumeinstellungen</div>
+            <button class="back" type="button" data-back data-i18n-aria-label="common.back" data-i18n-title="common.back">←</button>
+            <div class="sub-title" data-i18n="room.settings"></div>
           </div>
           <div class="sub-body settings-body">
             <div class="setting-row">
-              <span>Max. Teilnehmer</span>
+              <span data-i18n="roomSettings.maxMembers"></span>
               <div class="stepper">
-                <button id="max-dec" type="button" aria-label="Weniger">−</button>
+                <button id="max-dec" type="button" data-i18n-aria-label="roomSettings.fewer">−</button>
                 <span id="max-value" class="mono"></span>
-                <button id="max-inc" type="button" aria-label="Mehr">+</button>
+                <button id="max-inc" type="button" data-i18n-aria-label="roomSettings.more">+</button>
               </div>
             </div>
             <div class="setting-row">
-              <span>Steuern dürfen</span>
+              <span data-i18n="roomSettings.whoControls"></span>
               <div class="segmented">
-                <button id="mode-all" type="button">Alle</button>
-                <button id="mode-host" type="button">Nur der Host</button>
+                <button id="mode-all" type="button" data-i18n="roomSettings.all"></button>
+                <button id="mode-host" type="button" data-i18n="roomSettings.hostOnly"></button>
               </div>
             </div>
           </div>
@@ -201,29 +201,29 @@
         <section id="library" class="library" hidden>
           <div id="lib-signed-out" class="lib-intro" hidden>
             <div class="stack-4">
-              <div class="h1">Deine Mediathek</div>
-              <div class="mute pretty">Weiterschauen, Marker und Statistik gibt es mit einem Synchrothek-Konto.</div>
+              <div class="h1" data-i18n="library.title"></div>
+              <div class="mute pretty" data-i18n="library.signedOutText"></div>
             </div>
             <div id="lib-login" class="stack-8">
-              <button id="login-lib" class="btn primary lg" type="button">Mit Synchrothek-Konto anmelden</button>
-              <div class="hint">Gemeinsam schauen funktioniert auch ohne Konto.</div>
+              <button id="login-lib" class="btn primary lg" type="button" data-i18n="account.loginWithAccount"></button>
+              <div class="hint" data-i18n="account.worksWithout"></div>
             </div>
-            <div id="lib-login-pending" class="loading-row hint h40" hidden><span class="spin sm"></span>Anmeldung läuft im geöffneten Fenster …</div>
+            <div id="lib-login-pending" class="loading-row hint h40" hidden><span class="spin sm"></span><span data-i18n="account.signingIn"></span></div>
           </div>
 
           <div id="lib-permission" class="card callout" hidden>
-            <div class="pretty">Für Weiterschauen und Marker braucht die Extension Zugriff auf <span class="mono small">api.synchrothek.de</span>.</div>
-            <button id="grant-permission" class="btn primary md" type="button">Zugriff erlauben</button>
+            <div class="pretty"><span data-i18n="library.permission"></span> <span class="mono small">api.synchrothek.de</span>.</div>
+            <button id="grant-permission" class="btn primary md" type="button" data-i18n="library.grantPermission"></button>
           </div>
           <div id="lib-reauth" class="card callout" hidden>
-            <div class="pretty">Deine Anmeldung gilt nicht mehr für Weiterschauen und Marker.</div>
-            <button id="relogin" class="btn primary md" type="button">Erneut anmelden</button>
+            <div class="pretty" data-i18n="library.reauthText"></div>
+            <button id="relogin" class="btn primary md" type="button" data-i18n="account.relogin"></button>
           </div>
-          <div id="lib-loading" class="center-block mute" hidden><span class="spin"></span>Weiterschauen und Marker werden geladen …</div>
+          <div id="lib-loading" class="center-block mute" hidden><span class="spin"></span><span data-i18n="library.loading"></span></div>
           <div id="lib-unavailable" class="center-block" hidden>
-            <div class="mute pretty">Weiterschauen und Marker sind gerade nicht verfügbar.</div>
+            <div class="mute pretty" data-i18n="library.unavailable"></div>
             <div id="lib-unavailable-detail" class="hint pretty" hidden></div>
-            <button id="features-retry" class="btn sm-plus" type="button">Erneut versuchen</button>
+            <button id="features-retry" class="btn sm-plus" type="button" data-i18n="common.retry"></button>
           </div>
 
           <div id="lib-ready" hidden>
@@ -234,63 +234,63 @@
             <!-- Erteilte Einwilligung in älterer Fassung: neue Fassung anbieten -->
             <div id="lib-outdated" class="card callout" hidden>
               <div id="lib-outdated-text" class="pretty"></div>
-              <button id="lib-outdated-read" class="btn md" type="button">Neue Fassung lesen</button>
+              <button id="lib-outdated-read" class="btn md" type="button" data-i18n="library.readNewVersion"></button>
             </div>
 
             <div id="lib-wp" class="lib-pane" hidden>
               <div class="pane-head">
-                <div class="strong">Weiterschauen</div>
-                <button id="progress-enable" class="btn xs" type="button" hidden>Aktivieren</button>
+                <div class="strong" data-i18n="purpose.watch_progress"></div>
+                <button id="progress-enable" class="btn xs" type="button" data-i18n="common.enable" hidden></button>
               </div>
-              <div id="progress-off" class="hint pane-sub" hidden>Merkt sich, wo du in einer Sendung aufgehört hast.</div>
+              <div id="progress-off" class="hint pane-sub" data-i18n="library.progressOff" hidden></div>
               <div id="wp-solo" class="solo-box" hidden></div>
               <div id="progress-on" class="bleed" hidden>
-                <div class="eyebrow pad-8">Zuletzt geschaut</div>
+                <div class="eyebrow pad-8" data-i18n="library.recentlyWatched"></div>
                 <div id="progress-items"></div>
-                <div id="progress-loading" class="loading-row hint pad-8" hidden><span class="spin sm"></span>Wird geladen …</div>
-                <div id="progress-empty" class="hint pad-8" hidden>Noch nichts gespeichert.</div>
+                <div id="progress-loading" class="loading-row hint pad-8" hidden><span class="spin sm"></span><span data-i18n="common.loading"></span></div>
+                <div id="progress-empty" class="hint pad-8" data-i18n="library.progressEmpty" hidden></div>
               </div>
             </div>
 
             <div id="lib-mk" class="lib-pane" hidden>
               <div class="pane-head">
-                <div class="strong">Marker</div>
-                <button id="markers-enable" class="btn xs" type="button" hidden>Aktivieren</button>
+                <div class="strong" data-i18n="purpose.markers"></div>
+                <button id="markers-enable" class="btn xs" type="button" data-i18n="common.enable" hidden></button>
                 <span id="markers-context" class="hint ellipsis" hidden></span>
               </div>
-              <div id="markers-off" class="hint pane-sub" hidden>Setze Notizen an Stellen einer Sendung.</div>
+              <div id="markers-off" class="hint pane-sub" data-i18n="library.markersOff" hidden></div>
               <div id="mk-solo" class="solo-box" hidden></div>
               <div id="markers-on" class="stack-8" hidden>
-                <div id="markers-solo-hint" class="hint pretty" hidden>Du schaust gerade allein. Marker setzen geht dann nur mit „Auch beim alleine Schauen“.</div>
+                <div id="markers-solo-hint" class="hint pretty" data-i18n="markers.soloHint" hidden></div>
                 <form id="marker-form" class="row-6" hidden>
-                  <input id="marker-text" class="input sm" maxlength="200" placeholder="Notiz (optional)" aria-label="Notiz zum Marker" spellcheck="true" />
-                  <button id="marker-add" class="btn primary sm-strong" type="submit">Marker setzen<span id="marker-time" class="mono marker-time"></span></button>
+                  <input id="marker-text" class="input sm" maxlength="200" data-i18n-placeholder="markers.notePlaceholder" data-i18n-aria-label="markers.noteLabel" spellcheck="true" />
+                  <button id="marker-add" class="btn primary sm-strong" type="submit"><span data-i18n="markers.add"></span><span id="marker-time" class="mono marker-time"></span></button>
                 </form>
-                <div id="markers-novideo" class="hint" hidden>Öffne eine Sendung, um Marker zu setzen.</div>
+                <div id="markers-novideo" class="hint" data-i18n="markers.noVideo" hidden></div>
                 <div id="marker-items" class="bleed"></div>
               </div>
             </div>
 
             <div id="lib-st" class="lib-pane" hidden>
               <div class="pane-head">
-                <div class="strong">Statistik</div>
-                <button id="stats-enable" class="btn xs" type="button" hidden>Aktivieren</button>
-                <span id="stats-range" class="hint" hidden>Letzte 30 Tage</span>
+                <div class="strong" data-i18n="purpose.statistics"></div>
+                <button id="stats-enable" class="btn xs" type="button" data-i18n="common.enable" hidden></button>
+                <span id="stats-range" class="hint" data-i18n="stats.range" hidden></span>
               </div>
-              <div id="stats-off" class="hint pane-sub" hidden>Zuschauzeit in gemeinsamen Räumen, gezählt vom Sync-Server.</div>
+              <div id="stats-off" class="hint pane-sub" data-i18n="stats.off" hidden></div>
               <div id="st-solo" class="solo-box" hidden></div>
               <div id="stats-on" class="stack-12" hidden>
-                <div id="stats-loading" class="loading-row hint" hidden><span class="spin sm"></span>Überblick wird geladen …</div>
+                <div id="stats-loading" class="loading-row hint" hidden><span class="spin sm"></span><span data-i18n="stats.loading"></span></div>
                 <div id="stats-cards" class="stat-grid" hidden>
-                  <div class="stat"><span id="stats-total" class="stat-value"></span><span class="stat-label">insgesamt</span></div>
-                  <div class="stat"><span id="stats-together" class="stat-value"></span><span class="stat-label">davon gemeinsam</span></div>
-                  <div id="stats-alone-card" class="stat" hidden><span id="stats-alone" class="stat-value"></span><span class="stat-label">davon allein</span></div>
+                  <div class="stat"><span id="stats-total" class="stat-value"></span><span class="stat-label" data-i18n="stats.total"></span></div>
+                  <div class="stat"><span id="stats-together" class="stat-value"></span><span class="stat-label" data-i18n="stats.together"></span></div>
+                  <div id="stats-alone-card" class="stat" hidden><span id="stats-alone" class="stat-value"></span><span class="stat-label" data-i18n="stats.alone"></span></div>
                 </div>
                 <div id="stats-top-block" class="stack-2" hidden>
-                  <div class="eyebrow pad-b4">Meistgeschaut</div>
+                  <div class="eyebrow pad-b4" data-i18n="stats.top"></div>
                   <div id="stats-top"></div>
                 </div>
-                <a class="link small self-start" href="https://app.synchrothek.de/statistik" target="_blank" rel="noopener noreferrer">Zum Dashboard</a>
+                <a class="link small self-start" data-app-link="/statistik" data-i18n="stats.dashboard" target="_blank" rel="noopener noreferrer"></a>
               </div>
             </div>
           </div>
@@ -298,81 +298,90 @@
 
         <!-- Einstellungen -->
         <section id="settings" class="settings" hidden>
-          <button class="back-text" type="button" data-close-settings>← Zurück</button>
-          <div class="h1 tight">Einstellungen</div>
+          <button class="back-text" type="button" data-close-settings data-i18n="common.backArrow"></button>
+          <div class="h1 tight" data-i18n="header.settings"></div>
 
           <div class="stack-8">
-            <div class="eyebrow">Konto</div>
+            <div class="eyebrow" data-i18n="settings.account"></div>
             <div id="settings-account-in" class="card account-card" hidden>
               <span id="settings-avatar" class="avatar accent lg"></span>
-              <span class="grow ellipsis">Angemeldet als <strong id="settings-account-name"></strong></span>
-              <button id="logout" class="text-btn" type="button">Abmelden</button>
+              <span class="grow ellipsis"><span data-i18n="settings.signedInAs"></span> <strong id="settings-account-name"></strong></span>
+              <button id="logout" class="text-btn" type="button" data-i18n="account.logout"></button>
             </div>
             <div id="settings-account-out" class="stack-8" hidden>
-              <button id="login-settings" class="btn md-plus strong-500" type="button">Mit Synchrothek-Konto anmelden</button>
-              <div class="hint">Gemeinsam schauen funktioniert auch ohne Konto.</div>
+              <button id="login-settings" class="btn md-plus strong-500" type="button" data-i18n="account.loginWithAccount"></button>
+              <div class="hint" data-i18n="account.worksWithout"></div>
             </div>
-            <div id="settings-account-pending" class="loading-row hint h36" hidden><span class="spin sm"></span>Anmeldung läuft im geöffneten Fenster …</div>
+            <div id="settings-account-pending" class="loading-row hint h36" hidden><span class="spin sm"></span><span data-i18n="account.signingIn"></span></div>
           </div>
 
           <div class="stack-6">
-            <label for="name-input" class="label">Name im Raum</label>
+            <label for="name-input" class="label" data-i18n="settings.name"></label>
             <div id="name-edit">
               <input id="name-input" class="input md" maxlength="32" spellcheck="false" />
               <div class="row-between hint mt-6">
-                <span id="name-hint">So sehen dich die anderen im Raum.</span>
-                <button id="name-use-account" class="text-link small" type="button" hidden>Konto-Namen verwenden</button>
+                <span id="name-hint"></span>
+                <button id="name-use-account" class="text-link small" type="button" data-i18n="settings.useAccountName" hidden></button>
               </div>
+            </div>
+          </div>
+
+          <div class="stack-6">
+            <span id="lang-label" class="label" data-i18n="settings.language"></span>
+            <div class="segmented wide" role="group" aria-labelledby="lang-label">
+              <button id="lang-auto" type="button" data-i18n="settings.languageAuto"></button>
+              <button id="lang-de" type="button" lang="de">Deutsch</button>
+              <button id="lang-en" type="button" lang="en">English</button>
             </div>
           </div>
 
           <button id="auto-follow" class="switch-row" type="button" role="switch" aria-checked="true">
             <span class="nav-text">
-              <span class="strong-500">Automatisch zur Sendung des Raums wechseln</span>
-              <span class="hint">Öffnet neue Sendungen des Raums in diesem Tab.</span>
+              <span class="strong-500" data-i18n="settings.autoFollow"></span>
+              <span class="hint" data-i18n="settings.autoFollowHint"></span>
             </span>
             <span class="switch"><span></span></span>
           </button>
 
           <div class="card list-card">
             <button id="go-consents" class="nav-row" type="button" hidden>
-              <span class="nav-text"><span class="strong-500">Einwilligungen</span><span id="consent-summary" class="hint"></span></span>
+              <span class="nav-text"><span class="strong-500" data-i18n="consents.title"></span><span id="consent-summary" class="hint"></span></span>
               <span class="chev">›</span>
             </button>
             <button id="go-server" class="nav-row" type="button">
-              <span class="nav-text"><span class="strong-500">Server</span><span id="server-short" class="hint ellipsis"></span></span>
+              <span class="nav-text"><span class="strong-500" data-i18n="settings.server"></span><span id="server-short" class="hint ellipsis"></span></span>
               <span class="chev">›</span>
             </button>
           </div>
-          <button id="settings-save" class="btn primary md-plus" type="button">Speichern</button>
+          <button id="settings-save" class="btn primary md-plus" type="button" data-i18n="common.save"></button>
         </section>
 
         <section id="sub-server" class="sub" hidden>
           <div class="sub-head">
-            <button class="back" type="button" data-back aria-label="Zurück" title="Zurück">←</button>
-            <div class="sub-title">Server</div>
+            <button class="back" type="button" data-back data-i18n-aria-label="common.back" data-i18n-title="common.back">←</button>
+            <div class="sub-title" data-i18n="settings.server"></div>
           </div>
           <div class="sub-body stack-6">
-            <label for="server-input" class="label">Adresse</label>
+            <label for="server-input" class="label" data-i18n="server.address"></label>
             <input id="server-input" class="input md mono small" placeholder="wss://…" spellcheck="false" />
             <div class="row-between hint">
               <span id="server-kind"></span>
-              <button id="reset-server" class="text-link small" type="button" hidden>Standardserver verwenden</button>
+              <button id="reset-server" class="text-link small" type="button" data-i18n="server.useDefault" hidden></button>
             </div>
-            <div class="hint">Wird mit „Speichern“ in den Einstellungen übernommen.</div>
+            <div class="hint" data-i18n="server.saveHint"></div>
           </div>
         </section>
 
         <section id="sub-consents" class="sub" hidden>
           <div class="sub-head">
-            <button class="back" type="button" data-back aria-label="Zurück" title="Zurück">←</button>
-            <div class="sub-title">Einwilligungen</div>
+            <button class="back" type="button" data-back data-i18n-aria-label="common.back" data-i18n-title="common.back">←</button>
+            <div class="sub-title" data-i18n="consents.title"></div>
           </div>
           <div class="sub-body stack-8">
             <div id="consent-list" class="card"></div>
             <div class="hint pretty">
-              Ein Widerruf löscht sofort alle gespeicherten Daten dieser Funktion.
-              <a class="link" href="https://app.synchrothek.de/einwilligungen" target="_blank" rel="noopener noreferrer">Übersicht im Konto</a>
+              <span data-i18n="consents.revokeHint"></span>
+              <a class="link" data-app-link="/einwilligungen" data-i18n="consents.overview" target="_blank" rel="noopener noreferrer"></a>
             </div>
           </div>
         </section>
@@ -382,20 +391,20 @@
       <div id="consent-dialog" class="sheet-backdrop" role="dialog" aria-modal="true" aria-labelledby="consent-title" hidden>
         <div class="sheet">
           <div class="sheet-head">
-            <span class="eyebrow">Einwilligung</span>
+            <span class="eyebrow" data-i18n="consent.eyebrow"></span>
             <div id="consent-title" class="sheet-title"></div>
           </div>
-          <div id="consent-outdated" class="hint pretty sheet-note" hidden>Der Text wurde geändert. Deine bisherige Einwilligung gilt weiter, bis du der neuen Fassung zustimmst oder widerrufst.</div>
+          <div id="consent-outdated" class="hint pretty sheet-note" data-i18n="consent.outdated" hidden></div>
           <div id="consent-text" class="consent-text" tabindex="0"></div>
           <div class="sheet-meta">
             <span id="consent-version" class="mono tiny mute"></span>
-            <a class="link small" href="https://synchrothek.de/datenschutz#schauverlauf" target="_blank" rel="noopener noreferrer">Mehr in der Datenschutzerklärung</a>
+            <a class="link small" data-site-link="privacy#schauverlauf" data-i18n="consent.privacyLink" target="_blank" rel="noopener noreferrer"></a>
           </div>
           <div id="consent-error" class="inline-error sheet-error" hidden></div>
           <!-- Beide Möglichkeiten gleichwertig: gleiche Größe, gleiche Gestaltung -->
           <div class="sheet-actions">
-            <button id="consent-cancel" class="btn md-plus grow" type="button">Nicht jetzt</button>
-            <button id="consent-accept" class="btn md-plus grow" type="button">Einwilligen</button>
+            <button id="consent-cancel" class="btn md-plus grow" type="button" data-i18n="consent.notNow"></button>
+            <button id="consent-accept" class="btn md-plus grow" type="button" data-i18n="consent.accept"></button>
           </div>
         </div>
       </div>

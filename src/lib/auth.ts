@@ -7,6 +7,7 @@
  */
 import { browser } from 'wxt/browser';
 import { AUTH_BASE_URL, AUTH_DISCOVERY_URL, AUTH_ISSUER, AUTH_RESOURCES } from './config';
+import { getLanguage, msg, tr, type MessageKey, type Msg, type Params } from './i18n/index.ts';
 import { deleteSecure, readSecure, writeSecure } from './secure-store';
 
 const CLIENT_ID =
@@ -40,8 +41,15 @@ export type AccountStatus =
   | { state: 'signingIn' }
   | { state: 'signedIn'; name: string | null };
 
-/** Fehler mit deutscher Meldung für die Oberfläche. */
-export class AuthError extends Error {}
+/** Fehler mit Meldung für die Oberfläche (`text`: wird beim Anzeigen in der aktuellen Sprache übersetzt). */
+export class AuthError extends Error {
+  readonly text: Msg;
+  constructor(key: MessageKey, params?: Params) {
+    const text = msg(key, params);
+    super(tr(text));
+    this.text = text;
+  }
+}
 
 /** Antwort der Plattform mit OAuth-Fehlercode (z. B. invalid_grant). */
 class OAuthResponseError extends Error {
@@ -49,6 +57,8 @@ class OAuthResponseError extends Error {
     readonly status: number,
     readonly code: string | undefined,
     readonly description?: string,
+    /** Maschinenlesbarer Zusatz der Plattform, z. B. `account_banned`. */
+    readonly errorCode?: string,
   ) {
     super(`OAuth-Fehler ${status}${code ? ` (${code})` : ''}`);
   }
@@ -57,9 +67,13 @@ class OAuthResponseError extends Error {
 /** Warum die Anmeldung weg ist: abgelaufen/widerrufen/im Konto abgemeldet oder Konto gesperrt. */
 export type SessionLostReason = 'expired' | 'banned';
 
-/** `invalid_grant` eines gesperrten Kontos (error_description „Dieses Konto ist gesperrt.“). */
-export function isBanDescription(description: string | undefined): boolean {
-  return !!description && /gesperrt/i.test(description);
+/**
+ * `invalid_grant` eines gesperrten Kontos. Die Plattform meldet die Sperre als `error_code: "account_banned"`;
+ * ältere Plattform-Stände nur als Text in `error_description` („Dieses Konto ist (bis …) gesperrt.“).
+ */
+export function isBanResponse(errorCode: string | undefined, description: string | undefined): boolean {
+  if (errorCode === 'account_banned') return true;
+  return !!description && /gesperrt|suspended|banned/i.test(description);
 }
 
 export interface AuthCallbacks {
@@ -100,6 +114,7 @@ async function tokenRequest(params: Record<string, string>): Promise<Omit<Stored
       res.status,
       typeof data?.error === 'string' ? data.error : undefined,
       typeof data?.error_description === 'string' ? data.error_description : undefined,
+      typeof data?.error_code === 'string' ? data.error_code : undefined,
     );
   }
   const { access_token, refresh_token, expires_in } = data ?? {};
@@ -194,15 +209,15 @@ export function createAuth({ onChange, onSessionLost }: AuthCallbacks) {
       return next;
     } catch (err) {
       if (err instanceof OAuthResponseError && (err.code === 'invalid_grant' || err.status === 401)) {
-        const banned = isBanDescription(err.description);
+        const banned = isBanResponse(err.errorCode, err.description);
         await save(null);
         onSessionLost(banned ? 'banned' : 'expired');
-        if (banned) throw new AuthError('Dieses Konto ist gesperrt.');
+        if (banned) throw new AuthError('account.banned');
         // invalid_grant: abgelaufen, widerrufen oder im Konto abgemeldet (app.synchrothek.de/einstellungen#konto-geraete).
         // Danach gibt es kein Token mehr, Aufrufer bekommen null statt weiterer Fehler.
-        throw new AuthError('Du bist nicht mehr angemeldet. Bitte melde dich erneut an.');
+        throw new AuthError('auth.signedOutAgain');
       }
-      throw new AuthError('Die Synchrothek-Plattform ist gerade nicht erreichbar.');
+      throw new AuthError('api.platformUnreachable');
     }
   }
 
@@ -249,6 +264,9 @@ export function createAuth({ onChange, onSessionLost }: AuthCallbacks) {
         state,
         code_challenge: challenge,
         code_challenge_method: 'S256',
+        // Sprache der Anmeldeseite: `lang` wie bei allen Links auf die Plattform, `ui_locales` nach OpenID Connect
+        lang: getLanguage(),
+        ui_locales: getLanguage(),
       });
       for (const r of AUTH_RESOURCES) params.append('resource', r);
 
@@ -257,24 +275,24 @@ export function createAuth({ onChange, onSessionLost }: AuthCallbacks) {
         result = await browser.identity.launchWebAuthFlow({ url: `${AUTH_BASE_URL}/oauth2/authorize?${params}`, interactive: true });
       } catch (err) {
         console.info('Synchrothek: Login-Fenster beendet', err);
-        throw new AuthError('Anmeldung abgebrochen.');
+        throw new AuthError('auth.cancelled');
       }
-      if (!result) throw new AuthError('Anmeldung abgebrochen.');
+      if (!result) throw new AuthError('auth.cancelled');
 
       const back = new URL(result);
       // Antwort kann im Query oder (bei manchen Fehlern) im Fragment stehen
       const answer = back.search ? back.searchParams : new URLSearchParams(back.hash.slice(1));
-      if (answer.get('state') !== state) throw new AuthError('Anmeldung fehlgeschlagen (ungültige Antwort).');
+      if (answer.get('state') !== state) throw new AuthError('auth.invalidResponse');
       // RFC 9207: Steht `iss` in der Antwort, muss es der fest eingebaute Aussteller sein
       const iss = answer.get('iss');
-      if (iss !== null && iss !== AUTH_ISSUER) throw new AuthError('Anmeldung fehlgeschlagen (unerwarteter Aussteller).');
+      if (iss !== null && iss !== AUTH_ISSUER) throw new AuthError('auth.unexpectedIssuer');
       const error = answer.get('error');
-      if (error) throw new AuthError(error === 'access_denied' ? 'Anmeldung abgebrochen.' : `Anmeldung fehlgeschlagen (${error}).`);
+      if (error) throw error === 'access_denied' ? new AuthError('auth.cancelled') : new AuthError('auth.failedWithCode', { error: error.slice(0, 64) });
       const code = answer.get('code');
-      if (!code) throw new AuthError('Anmeldung fehlgeschlagen (kein Code erhalten).');
+      if (!code) throw new AuthError('auth.noCode');
       // Fehlt `iss`, obwohl der Server es laut Metadaten immer mitschickt: Antwort nicht verwenden
       if (iss === null && (await issuerParameterAnnounced())) {
-        throw new AuthError('Anmeldung fehlgeschlagen (Antwort ohne Aussteller).');
+        throw new AuthError('auth.noIssuer');
       }
 
       let tokens: Awaited<ReturnType<typeof tokenRequest>>;
@@ -282,7 +300,7 @@ export function createAuth({ onChange, onSessionLost }: AuthCallbacks) {
         tokens = await tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier });
       } catch (err) {
         console.warn('Synchrothek: Token-Tausch fehlgeschlagen', err);
-        throw new AuthError('Anmeldung fehlgeschlagen. Bitte versuche es noch einmal.');
+        throw new AuthError('auth.failedRetry');
       }
 
       let profile: Profile | null = null;

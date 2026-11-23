@@ -5,10 +5,11 @@
  * Ohne Abhängigkeit von `browser`, damit sich das Modul unter Node testen lässt.
  */
 import { API_BASE_URL } from './config.ts';
+import { getLanguage, type Lang } from './i18n/index.ts';
 
 export interface ClientConfig {
   minExtensionVersion: string | null; // x.y.z
-  notice: string | null; // Wartungshinweis, nur als Text anzeigen
+  notice: string | null; // Wartungshinweis, nur als Text anzeigen (Freitext der Plattform, nicht übersetzt)
 }
 
 const VERSION = /^\d+(\.\d+){0,3}$/;
@@ -47,10 +48,13 @@ export function parseClientConfig(data: unknown): ClientConfig | null {
 }
 
 /** Abruf ohne Token und ohne Cookies. Liefert null bei jedem Fehler. */
-export async function fetchClientConfig(doFetch: typeof fetch = globalThis.fetch.bind(globalThis)): Promise<ClientConfig | null> {
+export async function fetchClientConfig(
+  doFetch: typeof fetch = globalThis.fetch.bind(globalThis),
+  language: Lang = getLanguage(),
+): Promise<ClientConfig | null> {
   try {
     const res = await doFetch(`${API_BASE_URL}/client-config`, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Accept-Language': language },
       credentials: 'omit',
       redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
