@@ -26,6 +26,12 @@ export const AUTH_BASE_URL = 'https://app.synchrothek.de/api/auth';
 export const AUTH_HOST_MATCH = 'https://app.synchrothek.de/*';
 /** Seiten der Plattform, auf denen die Versionsabfrage (app-bridge) läuft. */
 export const APP_MATCH = 'https://app.synchrothek.de/*';
+/**
+ * Rückkehrseite der Anmeldung im Tab (Redirect-URI, siehe login-flow.ts). Die Plattform zeigt dort nur den
+ * Zustand an; den Code liest das Content-Script login-callback.content.ts und löst nur der Hintergrund ein.
+ */
+export const AUTH_CALLBACK_URL = 'https://app.synchrothek.de/extension/verbunden';
+export const AUTH_CALLBACK_MATCH = 'https://app.synchrothek.de/extension/verbunden*';
 /** Issuer des Autorisierungsservers (RFC 9207: `iss` in der Redirect-Antwort). */
 export const AUTH_ISSUER = AUTH_BASE_URL;
 /** Metadaten des Autorisierungsservers (RFC 8414). */

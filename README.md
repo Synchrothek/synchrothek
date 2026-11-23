@@ -59,7 +59,7 @@ Für AMO-Prüfer: Das hochgeladene Paket lässt sich aus dem Quellen-ZIP reprodu
 
 ### Chrome-Extension-ID
 
-Für den Login braucht Chrome eine feste Extension-ID (Redirect-URI `https://<id>.chromiumapp.org/`). Beim Entwickeln sorgt dafür der Schlüssel `key` in `wxt.config.ts`: der öffentliche Schlüssel der Chrome-Web-Store-Version (ID `ogecioeoilcegakfimcfnlojjnnponmn`), Entwicklungs-Builds haben also dieselbe ID wie die Store-Version.
+Für den Rückfall-Login über `identity.launchWebAuthFlow` (siehe *Anmeldung mit Synchrothek-Konto*) braucht Chrome eine feste Extension-ID (Redirect-URI `https://<id>.chromiumapp.org/`). Beim Entwickeln sorgt dafür der Schlüssel `key` in `wxt.config.ts`: der öffentliche Schlüssel der Chrome-Web-Store-Version (ID `ogecioeoilcegakfimcfnlojjnnponmn`), Entwicklungs-Builds haben also dieselbe ID wie die Store-Version.
 
 - `key` steht nur in Entwicklungs- und Testbuilds im Manifest (`npm run dev`, `--mode e2e`) oder wenn `CHROME_KEY_IN_MANIFEST=1` gesetzt ist. Das ZIP für den Chrome Web Store (`npm run zip`) enthält ihn nicht; dort ist die ID ohnehin festgelegt.
 - Der öffentliche Schlüssel stammt aus dem Developer Dashboard (*Paket* → „Öffentlichen Schlüssel ansehen“) und ist als `CHROME_KEY` in `wxt.config.ts` eingetragen.
@@ -92,6 +92,16 @@ Erlaubt der Browser nach einem automatischen Wechsel keine Wiedergabe mit Ton, s
   - festlegen, ob alle oder nur der Host steuern dürfen
 - **Host-Wechsel:** Verlässt der Host den Raum, übernimmt automatisch die Person, die am längsten dabei ist. Bei einem kurzen Verbindungsabbruch bleiben Platz und Host-Rolle 30 Sekunden lang erhalten.
 - **Raumdauer:** Hat der Server eine maximale Raumdauer, zeigt das Popup das Ende an. 10 Minuten vorher werden alle gewarnt.
+
+## Anmeldung mit Synchrothek-Konto
+
+OAuth 2.0 mit PKCE (S256) gegen die offizielle Plattform; die Extension sieht nie ein Passwort. Schnittstelle der Plattform: `docs/extension-integration.md` im Plattform-Repo, Adressen in [`docs/offizielle-dienste.md`](docs/offizielle-dienste.md).
+
+- **Im Tab (Standard ab 0.6.0):** *Anmelden* öffnet einen normalen Tab neben dem aktuellen mit der Anmeldeseite von `app.synchrothek.de`. Redirect-URI ist `https://app.synchrothek.de/extension/verbunden`. Dort liest das Content-Script `login-callback.content.ts` (nur für diese Seite, `document_start`, oberster Frame) `code`, `state`, `iss` bzw. `error` selbst aus der Adresse und schickt sie per `runtime.sendMessage` an den Hintergrund. Der Hintergrund nimmt die Nachricht nur an, wenn sie vom eigenen Content-Script im obersten Frame genau dieser Seite kommt, der Tab der der offenen Anmeldung ist und `state` sowie `iss` passen. Dann tauscht er den Code mit dem PKCE-Verifier ein (bei Netzwerk- oder Serverfehler ein Wiederholversuch), lädt das Profil, schließt den Tab und aktiviert den vorherigen Tab. Der Seite meldet das Content-Script nur den Zustand (Attribute `data-synchrothek-login` am `<html>`), nie Tokens.
+- **Offene Anmeldung:** Verifier, State und Tab liegen in `storage.session` (überstehen einen Neustart des Hintergrunds, für Content-Scripts nicht lesbar), gelten 15 Minuten und genau einmal. Eine neue Anmeldung ersetzt die offene (deren Tab wird geschlossen); Schließen des Tabs bricht ab.
+- **Rückfall:** Fehlt der Zugriff auf `app.synchrothek.de` (Firefox: Berechtigung entzogen) oder lässt sich kein Tab öffnen, läuft die Anmeldung im Fenster von `identity.launchWebAuthFlow` mit der Redirect-URI des Browsers (`https://<id>.chromiumapp.org/` bzw. `…extensions.allizom.org/`), ebenfalls mit gespeicherter offener Anmeldung.
+- **Fehler:** abgebrochen (Hinweis, keine Störung), abgelaufen, nicht erreichbar/Zeitüberschreitung und Fehler der Plattform (mit *Erneut versuchen*), Antwort passt zu keiner offenen Anmeldung, unerwarteter Aussteller, Konto gesperrt. Dieselbe Fehlerart zeigt die Seite im Tab.
+- Die Logik ohne `browser`-Abhängigkeit (Absenderprüfung, Zuordnung, Fehlerarten, offene Anmeldung) steht in `src/lib/login-flow.ts` und ist mit Unit-Tests abgedeckt.
 
 ## Weiterschauen und Marker (mit Synchrothek-Konto)
 
@@ -160,6 +170,7 @@ src/
     background.ts   WebSocket-Verbindung, Raumzustand, Vermittlung (überlebt Seitenwechsel)
     content.ts      findet das <video> des Players, meldet und übernimmt Play/Pause/Seek
     app-bridge.content.ts  beantwortet auf app.synchrothek.de die Versionsabfrage von „Hilfe & Kontakt“
+    login-callback.content.ts  übergibt auf app.synchrothek.de/extension/verbunden die Antwort der Anmeldung an den Background
     popup/          Raum erstellen/beitreten, Steuerung, Teilnehmer, Einstellungen
   lib/
     config.ts       Standard-Server und unterstützte Seiten
@@ -167,6 +178,7 @@ src/
     messages.ts     interne Nachrichten zwischen Background, Content-Script und Popup
     content-url.ts  „Gleiche Sendung?“ (URL-Vergleich)
     auth.ts         Login mit Synchrothek-Konto (OAuth, Tokens nur im Background)
+    login-flow.ts   Anmeldung im Tab: offene Anmeldung, Absender- und State-Prüfung, Fehlerarten (ohne browser, testbar)
     api.ts          Client für die Plattform-API (Weiterschauen, Marker, Einwilligungen)
     watch-features.ts  Einwilligungen, gedrosseltes Speichern, Marker, Statistik-Überblick (Background)
     social.ts       Freundesliste und Einladungen in Räume (Background)

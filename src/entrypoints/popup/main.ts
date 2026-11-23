@@ -267,6 +267,12 @@ function renderChrome(s: PopupStatus) {
   const account = s.account;
   $('login-top').hidden = account.state !== 'signedOut';
   $('login-top-pending').hidden = account.state !== 'signingIn';
+  if (account.state === 'signingIn') {
+    // Anmeldung im Tab (Standard) bzw. im Fenster von launchWebAuthFlow (Rückfall)
+    const key = account.where === 'window' ? 'account.signingInWindow' : 'account.signingIn';
+    for (const node of document.querySelectorAll<HTMLElement>('.signing-in-text')) node.textContent = t(key);
+    $('login-top-pending').title = t(key);
+  }
   $('avatar').hidden = account.state !== 'signedIn';
   $('gear').hidden = account.state === 'signedIn';
   if (account.state === 'signedIn') fillAvatar($('avatar-initial'), s.profile?.username ?? account.name ?? s.name, s.profile?.avatarUrl ?? null);
@@ -796,6 +802,8 @@ function renderSettings(s: PopupStatus) {
   if (document.activeElement !== serverInput) serverInput.value = server;
   $('server-kind').textContent = t(s.isDefaultServer && ui.draftServer === null ? 'server.default' : 'server.custom');
   $('reset-server').hidden = s.isDefaultServer && ui.draftServer === null;
+  const draft = (ui.draftServer ?? '').trim();
+  $<HTMLButtonElement>('server-save').disabled = ui.draftServer === null || !draft || draft === s.serverUrl;
 
   // Einwilligungen
   if (ui.settingsSub === 'consents' && consent) {
@@ -831,6 +839,15 @@ function openSettings() {
   ui.settingsSub = null;
   ui.draftName = null;
   ui.draftServer = null;
+  rerender();
+}
+
+/** Server direkt auf der Unterseite speichern und zurück zu den Einstellungen. */
+function saveServer() {
+  const server = (ui.draftServer ?? '').trim();
+  if (ui.draftServer !== null && server && server !== lastStatus?.serverUrl) send({ cmd: 'setServer', url: server });
+  ui.draftServer = null;
+  ui.settingsSub = null;
   rerender();
 }
 
@@ -1007,10 +1024,13 @@ async function main() {
     rerender();
   });
   click('notice-close', () => send({ cmd: 'dismissNotice' }));
+  // Anmeldung hängt (Tab verloren, Fenster geschlossen): neu starten, ersetzt die offene Anmeldung
+  for (const node of document.querySelectorAll('.signing-restart')) node.addEventListener('click', () => send({ cmd: 'login' }));
   click('notice-retry', () => {
     const retry = lastStatus?.notice?.retry;
     if (retry?.action === 'join') send({ cmd: 'join', code: retry.code });
     else if (retry?.action === 'create') send({ cmd: 'create' });
+    else if (retry?.action === 'login') send({ cmd: 'login' });
   });
 
   // Lobby
@@ -1120,6 +1140,10 @@ async function main() {
     ui.draftServer = (e.target as HTMLInputElement).value;
     rerender();
   });
+  on('server-input', 'keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') saveServer();
+  });
+  click('server-save', saveServer);
   click('reset-server', () => {
     ui.draftServer = null;
     send({ cmd: 'resetServer' });

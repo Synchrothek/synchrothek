@@ -92,8 +92,8 @@ export type PopupCommand =
   | { cmd: 'loadFriends' }
   | { cmd: 'inviteFriend'; friendId: string };
 
-/** Knopf „Erneut versuchen“: Raum erstellen (neues Ticket) bzw. dem Raum mit diesem Code beitreten. */
-export type NoticeRetry = { action: 'create' } | { action: 'join'; code: string };
+/** Knopf „Erneut versuchen“: Raum erstellen (neues Ticket), dem Raum mit diesem Code beitreten bzw. neu anmelden. */
+export type NoticeRetry = { action: 'create' } | { action: 'join'; code: string } | { action: 'login' };
 
 export interface Notice {
   kind: 'error' | 'info';

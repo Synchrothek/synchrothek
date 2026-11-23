@@ -7,6 +7,7 @@ import { browser, type Browser } from 'wxt/browser';
 import { defineBackground } from 'wxt/utils/define-background';
 import { apiUrl, createApi, ROOM_CODE_PATTERN, type BasePurpose, type DataContext, type Purpose, type RoomInvite } from '../lib/api';
 import { createAuth, AuthError } from '../lib/auth';
+import { isLoginCallbackMessage, loginCallbackTabId, type LoginCallbackResult } from '../lib/login-flow';
 import { createAvatars } from '../lib/avatars';
 import { BrokerError, createBroker, isOfficialNodeUrl } from '../lib/broker';
 import { syncErrorMsg } from '../lib/i18n/errors';
@@ -358,7 +359,7 @@ export default defineBackground(() => {
   }
   void loadClientConfig();
   if (import.meta.env.MODE !== 'production') {
-    console.info(`Synchrothek: OAuth-Client ${auth.clientId}, Redirect-URI ${browser.identity.getRedirectURL()}`);
+    console.info(`Synchrothek: OAuth-Client ${auth.clientId}, Rückfall-Redirect-URI ${browser.identity.getRedirectURL()}`);
   }
 
   async function init() {
@@ -1396,17 +1397,55 @@ export default defineBackground(() => {
     for (const [p] of ports) post(p, { type: 'seekTo', position });
   }
 
-  function startLogin() {
+  /** Anmeldung starten; `returnTabId`: Tab, aus dem das Popup geöffnet wurde (danach wieder aktiv). */
+  function startLogin(returnTabId: number | null) {
     state.notice = null;
-    // Nicht abwarten: Das Login-Fenster bleibt offen, bis die Person fertig ist (das Popup schließt sich dabei)
-    auth.login().then(() => {
-      // Läuft schon eine Verbindung, gilt die Anmeldung ab sofort (z. B. für einen später erstellten Raum)
-      if (connAuth?.identified && !connAuth.account) void sendAuth(ws);
-    }, (err) => {
-      setNotice('error', err instanceof AuthError ? err.text : localized('auth.failed'));
-      if (!(err instanceof AuthError)) console.warn('Synchrothek: Anmeldung fehlgeschlagen', err);
+    // Nicht abwarten: Der Anmelde-Tab (bzw. das Fenster) bleibt offen, bis die Person fertig ist (das Popup schließt sich dabei)
+    auth.login({ returnTabId }).then(afterLogin, loginFailed);
+  }
+
+  function afterLogin() {
+    // Läuft schon eine Verbindung, gilt die Anmeldung ab sofort (z. B. für einen später erstellten Raum)
+    if (isSignedIn() && connAuth?.identified && !connAuth.account) void sendAuth(ws);
+  }
+
+  function loginFailed(err: unknown) {
+    if (err instanceof AuthError) {
+      // Abgebrochen ist keine Störung; Netzwerk- und Serverfehler mit „Erneut versuchen“
+      const retry = err.kind === 'network' || err.kind === 'server';
+      setNotice(err.kind === 'cancelled' ? 'info' : 'error', err.text, retry ? { retry: { action: 'login' } } : {});
+    } else {
+      setNotice('error', localized('auth.failed'));
+      console.warn('Synchrothek: Anmeldung fehlgeschlagen', err);
+    }
+    pushStatus();
+  }
+
+  /**
+   * Rückkehr aus dem Anmelde-Tab (Content-Script der Seite /extension/verbunden, Absender geprüft).
+   * Erfolg oder Abbruch: Tab schließen und den vorherigen Tab wieder aktivieren. Andere Fehler: Tab bleibt
+   * offen und zeigt den Fehler; im Popup steht derselbe Hinweis.
+   */
+  async function handleLoginCallback(tabId: number, params: Parameters<typeof auth.completeTabLogin>[1]): Promise<LoginCallbackResult> {
+    await ready;
+    const result = await auth.completeTabLogin(tabId, params);
+    if (result.ok) {
+      afterLogin();
       pushStatus();
-    });
+    } else if (result.matched || result.error.kind === 'expired') {
+      // Abgelaufen: Die offene Anmeldung ist schon verworfen; das Popup soll es trotzdem sagen
+      loginFailed(result.error);
+    }
+    if (result.ok || (result.matched && result.error.kind === 'cancelled')) {
+      // Kurz „Verbunden“ zeigen, dann zurück
+      setTimeout(() => void closeLoginTab(tabId, result.returnTabId), result.ok ? 900 : 300);
+    }
+    return result.ok ? { ok: true } : { ok: false, error: result.error.kind };
+  }
+
+  async function closeLoginTab(tabId: number, returnTabId: number | null) {
+    if (returnTabId !== null) await browser.tabs.update(returnTabId, { active: true }).catch(() => {});
+    await browser.tabs.remove(tabId).catch(() => {});
   }
 
   // -------------------------------------------------------------------------
@@ -1667,13 +1706,13 @@ export default defineBackground(() => {
         social.dismissError();
         break;
       case 'login':
-        startLogin();
+        startLogin(tabId);
         break;
       case 'relogin':
         // Die API lehnt auch ein frisches Token ab: Anmeldung erneuern
         if (connAuth) clearTimeout(connAuth.renewTimer);
         await auth.logout();
-        startLogin();
+        startLogin(tabId);
         break;
       case 'featuresRefresh':
         await features.refresh(showUrlOf(tabId), contextOf(tabId), { force: true });
@@ -1855,12 +1894,30 @@ export default defineBackground(() => {
   // -------------------------------------------------------------------------
 
   // Nur Ports: Popup (Seite der Extension) und eigene Content-Scripts auf Mediathek-/Plattform-Seiten,
-  // geprüft über port.sender. Einzelnachrichten (runtime.onMessage) und Nachrichten von außen
-  // (onConnectExternal/onMessageExternal, externally_connectable) nimmt der Hintergrund nicht an.
+  // geprüft über port.sender. Nachrichten von außen (onConnectExternal/onMessageExternal,
+  // externally_connectable) nimmt der Hintergrund nicht an.
   browser.runtime.onConnect.addListener((port) => {
     if (port.name === 'content') onContentPort(port);
     else if (port.name === 'popup') onPopupPort(port);
     else port.disconnect();
+  });
+
+  // Einzige Einzelnachricht (runtime.onMessage): die Rückkehr der Anmeldung im Tab. Sie kommt genau einmal
+  // vom Content-Script der Seite https://app.synchrothek.de/extension/verbunden; ein Port lohnt dafür nicht,
+  // und die Antwort (Ergebnis für die Anzeige auf der Seite) passt zu sendMessage. Angenommen wird nur
+  // genau diese Nachrichtenform vom eigenen Content-Script im obersten Frame genau dieser Seite
+  // (loginCallbackTabId); dass Tab und State zur offenen Anmeldung passen, prüft auth.completeTabLogin.
+  // Alles andere bleibt unbeantwortet.
+  browser.runtime.onMessage.addListener((message: unknown, sender: Browser.runtime.MessageSender, sendResponse: (response: unknown) => void) => {
+    if (!isLoginCallbackMessage(message)) return false;
+    const tabId = loginCallbackTabId(sender, browser.runtime.id);
+    if (tabId === null) return false;
+    const { code, state: oauthState, iss, error } = message;
+    handleLoginCallback(tabId, { code, state: oauthState, iss, error }).then(sendResponse, (err) => {
+      console.warn('Synchrothek: Rückkehr der Anmeldung fehlgeschlagen', err);
+      sendResponse({ ok: false, error: 'failed' } satisfies LoginCallbackResult);
+    });
+    return true; // Antwort kommt asynchron
   });
 
   // Einladungen in Räume: etwa jede Minute abfragen, solange man angemeldet ist
@@ -1912,6 +1969,11 @@ export default defineBackground(() => {
     tabTitles.delete(tabId);
     peeks.delete(tabId);
     soloStats.end(tabId);
+    // Anmelde-Tab geschlossen, bevor die Anmeldung fertig war: abgebrochen
+    if (await auth.loginTabClosed(tabId).catch(() => false)) {
+      setNotice('info', localized('auth.cancelled'));
+      pushStatus();
+    }
     await ready;
     if (tabId === state.tabId && (state.inRoom || state.code)) {
       leaveRoom();

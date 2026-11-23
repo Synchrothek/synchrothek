@@ -46,7 +46,7 @@ The interface follows the browser language (German if the preferred language sta
 
 Test without account: open a programme on www.ardmediathek.de or www.zdf.de in two browser profiles, click the extension icon → "Create room" ("Raum erstellen") in profile 1, enter the room code via "Join" ("Beitreten") in profile 2. Play/pause/seek are synced.
 
-Test with account (optional features: invitations, resume, bookmarks, statistics): sign in via "Sign in" ("Anmelden") with the test account below. Data is only stored after explicit consent in the popup (separately per feature and for watching alone).
+Test with account (optional features: invitations, resume, bookmarks, statistics): click "Sign in" ("Anmelden") in the popup. A new tab opens on app.synchrothek.de: sign in with the test account below and click "Authorise" ("Autorisieren"). The tab then shows "Connected" and closes by itself; the popup shows the account. Data is only stored after explicit consent in the popup (separately per feature and for watching alone).
 
 Test account: <Benutzername> / <Passwort>
 
@@ -61,10 +61,10 @@ Build (Firefox): Node 24 LTS, npm 11: npm ci && npm run build:firefox → .outpu
 - **Remote Code:** No, I am not using remote code.
 - **Begründungen der Berechtigungen:**
   - `storage`: Stores settings locally (display name, auto-follow, optional custom server) and a random installation ID; keeps the current room in session storage so the extension can rejoin after the service worker restarts.
-  - `identity`: Sign-in with the optional Synchrothek account via OAuth 2.0 + PKCE (identity.launchWebAuthFlow, login page on app.synchrothek.de). No Google account is used; the extension never sees the password.
+  - `identity`: Sign-in with the optional Synchrothek account via OAuth 2.0 + PKCE. The sign-in normally opens in a regular tab on app.synchrothek.de; identity.launchWebAuthFlow is used as a fallback (e.g. if access to app.synchrothek.de has been revoked) and for its redirect URL. No Google account is used; the extension never sees the password.
   - `alarms`: When signed in, checks about once per minute for room invitations from friends, even while the service worker is suspended.
   - `notifications`: Shows a system notification when a friend invites you to a watch room (join/decline).
-  - Host permissions: `*.ardmediathek.de`, `*.zdf.de`: content script attaches to the official player's video element to sync play/pause/position; the room tab's URL is read so everyone opens the same programme. `app.synchrothek.de`: token/revocation/profile endpoints of the account sign-in and a version check on the help page. `api.synchrothek.de`: resume position, bookmarks, friends, invitations and statistics (only with consent).
+  - Host permissions: `*.ardmediathek.de`, `*.zdf.de`: content script attaches to the official player's video element to sync play/pause/position; the room tab's URL is read so everyone opens the same programme. `app.synchrothek.de`: token/revocation/profile endpoints of the account sign-in, a content script only on the sign-in return page app.synchrothek.de/extension/verbunden (hands the one-time authorization code to the extension, which redeems it with its PKCE verifier) and a version check on the help page. `api.synchrothek.de`: resume position, bookmarks, friends, invitations and statistics (only with consent).
 - **Datenkategorien (Privacy practices):** Personally identifiable information (Anzeigename, Benutzername, Installations-ID), Authentication information (Anmelde-Token), Web history (Adresse der Sendung), User activity (Play/Pause/Position), Website content (Titel der Sendung). Nicht: Gesundheit, Finanzen, Standort, persönliche Kommunikation.
 - **Zusicherungen:** alle drei anhaken (kein Verkauf, keine zweckfremde Nutzung, keine Kreditwürdigkeitsprüfung).
 - **Händlerstatus (DSA):** Nicht-Händler (privates, nicht kommerzielles Projekt).
@@ -118,10 +118,10 @@ Privacy: https://synchrothek.de/en/privacy · Contact: contact@synchrothek.de
 ### Permission justifications (Chrome, English – same as above)
 
 - `storage`: Stores settings locally (display name, language, auto-follow, optional custom server) and a random installation ID; keeps the current room in session storage so the extension can rejoin after the service worker restarts.
-- `identity`: Sign-in with the optional Synchrothek account via OAuth 2.0 + PKCE (identity.launchWebAuthFlow, login page on app.synchrothek.de). No Google account is used; the extension never sees the password.
+- `identity`: Sign-in with the optional Synchrothek account via OAuth 2.0 + PKCE. The sign-in normally opens in a regular tab on app.synchrothek.de; identity.launchWebAuthFlow is used as a fallback (e.g. if access to app.synchrothek.de has been revoked) and for its redirect URL. No Google account is used; the extension never sees the password.
 - `alarms`: When signed in, checks about once per minute for room invitations from friends, even while the service worker is suspended.
 - `notifications`: Shows a system notification when a friend invites you to a watch room (join/decline).
-- Host permissions: `*.ardmediathek.de`, `*.zdf.de`: the content script attaches to the official player's video element to sync play/pause/position; the room tab's URL is read so everyone opens the same programme. `app.synchrothek.de`: token/revocation/profile endpoints of the account sign-in and a version check on the help page. `api.synchrothek.de`: resume position, bookmarks, friends, invitations and statistics (only with consent).
+- Host permissions: `*.ardmediathek.de`, `*.zdf.de`: the content script attaches to the official player's video element to sync play/pause/position; the room tab's URL is read so everyone opens the same programme. `app.synchrothek.de`: token/revocation/profile endpoints of the account sign-in, a content script only on the sign-in return page app.synchrothek.de/extension/verbunden (hands the one-time authorization code to the extension, which redeems it with its PKCE verifier) and a version check on the help page. `api.synchrothek.de`: resume position, bookmarks, friends, invitations and statistics (only with consent).
 - **Single purpose:** Synchrothek syncs playback in media libraries between several people (watching together). The optional account features (invitations, continue watching, markers, statistics) exclusively serve this watching.
 
 ### Data categories (Privacy practices, English)

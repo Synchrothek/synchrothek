@@ -75,7 +75,7 @@
             <div class="grow hint pretty" data-i18n="account.worksWithout"></div>
             <button id="login-lobby" class="btn sm-plus" type="button" data-i18n="account.login"></button>
           </div>
-          <div id="lobby-account-pending" class="lobby-foot hint" hidden><span class="spin sm"></span><span data-i18n="account.signingIn"></span></div>
+          <div id="lobby-account-pending" class="lobby-foot hint" hidden><span class="spin sm"></span><span class="signing-in-text" data-i18n="account.signingIn"></span><button type="button" class="text-btn signing-restart" data-i18n="account.restartLogin" data-i18n-title="account.restartLoginTitle"></button></div>
         </section>
 
         <section id="pending" class="pending" hidden>
@@ -208,7 +208,7 @@
               <button id="login-lib" class="btn primary lg" type="button" data-i18n="account.loginWithAccount"></button>
               <div class="hint" data-i18n="account.worksWithout"></div>
             </div>
-            <div id="lib-login-pending" class="loading-row hint h40" hidden><span class="spin sm"></span><span data-i18n="account.signingIn"></span></div>
+            <div id="lib-login-pending" class="loading-row hint h40" hidden><span class="spin sm"></span><span class="signing-in-text" data-i18n="account.signingIn"></span><button type="button" class="text-btn signing-restart" data-i18n="account.restartLogin" data-i18n-title="account.restartLoginTitle"></button></div>
           </div>
 
           <div id="lib-permission" class="card callout" hidden>
@@ -312,7 +312,7 @@
               <button id="login-settings" class="btn md-plus strong-500" type="button" data-i18n="account.loginWithAccount"></button>
               <div class="hint" data-i18n="account.worksWithout"></div>
             </div>
-            <div id="settings-account-pending" class="loading-row hint h36" hidden><span class="spin sm"></span><span data-i18n="account.signingIn"></span></div>
+            <div id="settings-account-pending" class="loading-row hint h36" hidden><span class="spin sm"></span><span class="signing-in-text" data-i18n="account.signingIn"></span><button type="button" class="text-btn signing-restart" data-i18n="account.restartLogin" data-i18n-title="account.restartLoginTitle"></button></div>
           </div>
 
           <div class="stack-6">
@@ -368,7 +368,7 @@
               <span id="server-kind"></span>
               <button id="reset-server" class="text-link small" type="button" data-i18n="server.useDefault" hidden></button>
             </div>
-            <div class="hint" data-i18n="server.saveHint"></div>
+            <button id="server-save" class="btn primary md-plus mt-6" type="button" data-i18n="common.save"></button>
           </div>
         </section>
 

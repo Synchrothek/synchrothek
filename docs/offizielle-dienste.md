@@ -11,6 +11,7 @@ Die Extension funktioniert ohne Konto und auch mit einem selbst gehosteten Sync-
 | Vermittler | `https://sync.synchrothek.de/v1/rooms` | Raum erstellen (Raumcode, Knoten, Ticket) und Knoten eines Raums finden |
 | Sync-Knoten | `wss://<name>.sync.synchrothek.de` | Gemeinsam schauen: Play, Pause, Position in Echtzeit |
 | Versionsabfrage | Content-Script auf `https://app.synchrothek.de/*` | Beantwortet nur die Frage der Seite nach Version und Browser |
+| Rückkehr der Anmeldung | Redirect-URI `https://app.synchrothek.de/extension/verbunden`, Content-Script nur für diese Seite | Liest `code`/`state`/`iss`/`error` aus der Adresse und gibt sie an den Hintergrund; der Code ist ohne den PKCE-Verifier der Extension wertlos. Rückfall: Redirect-URI von `identity.launchWebAuthFlow` |
 
 ## Was gesendet wird
 
@@ -34,6 +35,7 @@ Die Extension funktioniert ohne Konto und auch mit einem selbst gehosteten Sync-
 
 ## Tokens
 
+- Die Anmeldung läuft in einem normalen Tab; die Extension sieht nie ein Passwort. Den Code löst nur der Hintergrund ein, und nur, wenn die Rückkehr vom eigenen Content-Script im Anmelde-Tab kommt und `state` sowie `iss` passen.
 - Access- und Refresh-Token liegen nur im Hintergrundteil der Extension (IndexedDB der Extension, für Webseiten und Content-Scripts nicht erreichbar), nie in Popup oder Content-Scripts.
 - Tokens gehen **ausschließlich** an die oben genannten offiziellen Adressen: `app.synchrothek.de` (Anmeldung), `api.synchrothek.de` (API), `sync.synchrothek.de` (Vermittler) und Knoten, deren Adresse genau `wss://<name>.sync.synchrothek.de` ist (ohne Port, Pfad, Zugangsdaten).
 - **Nie an selbst gehostete Server**, nie in einer URL, nie über Weiterleitungen (`redirect: 'error'`), immer ohne Cookies.
