@@ -1,4 +1,9 @@
-# Synchrothek
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/kopf-dunkel.svg">
+    <img src=".github/assets/kopf-hell.svg" alt="Synchrothek Extension" height="56">
+  </picture>
+</h1>
 
 > **English summary:** Synchrothek is a browser extension (Manifest V3, Chrome and Firefox) for watching content from the German public broadcasters' media libraries together. Everyone watches in the official player; only play, pause and position are synchronised via a small WebSocket server (self-hostable). An optional Synchrothek account adds resume, markers, statistics and friends – watch history is only stored with explicit consent. The interface is available in German and English (follows the browser language, can be changed in the popup settings). Licensed under AGPL-3.0-only. Independent project, not affiliated with ARD or ZDF. Security reports: see [SECURITY.md](SECURITY.md).
 
